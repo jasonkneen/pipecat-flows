@@ -270,6 +270,100 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.mock_llm.register_function.call_count, 3)
         self.assertEqual(len(flow_manager._current_functions), 3)
 
+    async def test_redeclared_function_rebinds_new_handler(self):
+        """Regression: redeclaring a function in a new node must bind the new handler.
+
+        Two adjacent nodes declare ``go`` with different handlers returning
+        different next nodes. The LLM-registered handler for ``go`` must reflect
+        the latest node's handler, not the first one's.
+
+        See https://github.com/pipecat-ai/pipecat-flows/issues/269.
+        """
+        flow_manager = FlowManager(
+            task=self.mock_task,
+            llm=self.mock_llm,
+            context_aggregator=self.mock_context_aggregator,
+        )
+        await flow_manager.initialize()
+
+        handler_a_calls = []
+        handler_b_calls = []
+
+        async def handler_a(args, flow_manager):
+            handler_a_calls.append(args)
+            return {"from": "A"}, {
+                "task_messages": [{"role": "developer", "content": "menu"}],
+                "functions": [],
+            }
+
+        async def handler_b(args, flow_manager):
+            handler_b_calls.append(args)
+            return {"from": "B"}, {
+                "task_messages": [{"role": "developer", "content": "home"}],
+                "functions": [],
+            }
+
+        await flow_manager.set_node_from_config(
+            {
+                "task_messages": [{"role": "developer", "content": "A"}],
+                "functions": [
+                    FlowsFunctionSchema(
+                        name="go",
+                        description="A's go",
+                        properties={},
+                        required=[],
+                        handler=handler_a,
+                    ),
+                ],
+            }
+        )
+        await flow_manager.set_node_from_config(
+            {
+                "task_messages": [{"role": "developer", "content": "B"}],
+                "functions": [
+                    FlowsFunctionSchema(
+                        name="go",
+                        description="B's go",
+                        properties={},
+                        required=[],
+                        handler=handler_b,
+                    ),
+                ],
+            }
+        )
+
+        # ``go`` must be registered for both nodes, not just the first one.
+        go_registrations = [
+            call_args
+            for call_args in self.mock_llm.register_function.call_args_list
+            if call_args[0][0] == "go"
+        ]
+        self.assertEqual(
+            len(go_registrations),
+            2,
+            "Expected 'go' to be re-registered when node B redeclared it; "
+            f"got {len(go_registrations)} registration(s).",
+        )
+
+        # Drive the most recent transition_func and confirm handler_b runs.
+        latest_go = go_registrations[-1][0][1]
+
+        async def result_callback(result, *, properties=None):
+            pass
+
+        params = FunctionCallParams(
+            function_name="go",
+            tool_call_id="t1",
+            arguments={},
+            llm=None,
+            context=None,
+            result_callback=result_callback,
+        )
+        await latest_go(params)
+
+        self.assertEqual(len(handler_b_calls), 1, "handler_b should have run")
+        self.assertEqual(len(handler_a_calls), 0, "handler_a should NOT have run")
+
     async def test_initialize_already_initialized(self):
         """Test initializing an already initialized flow manager."""
         flow_manager = FlowManager(

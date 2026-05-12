@@ -527,7 +527,11 @@ class FlowManager:
         cancel_on_interruption: bool = True,
         timeout_secs: float | None = None,
     ) -> None:
-        """Register a function with the LLM if not already registered.
+        """Register a function with the LLM.
+
+        Always re-registers so a node redeclaring a function with a different
+        handler replaces the previous binding. ``LLMService.register_function``
+        is a dict upsert by name, so re-registration is idempotent.
 
         Args:
             name: Name of the function to register
@@ -541,27 +545,26 @@ class FlowManager:
         Raises:
             FlowError: If function registration fails
         """
-        if name not in self._current_functions:
-            try:
-                # Create transition function
-                transition_func = await self._create_transition_func(name, handler)
+        try:
+            # Create transition function
+            transition_func = await self._create_transition_func(name, handler)
 
-                # Register function with LLM (or LLMSwitcher)
-                kwargs = {}
-                if timeout_secs is not None:
-                    kwargs["timeout_secs"] = timeout_secs
-                self._llm.register_function(
-                    name,
-                    transition_func,
-                    cancel_on_interruption=cancel_on_interruption,
-                    **kwargs,
-                )
+            # Register function with LLM (or LLMSwitcher)
+            kwargs = {}
+            if timeout_secs is not None:
+                kwargs["timeout_secs"] = timeout_secs
+            self._llm.register_function(
+                name,
+                transition_func,
+                cancel_on_interruption=cancel_on_interruption,
+                **kwargs,
+            )
 
-                new_functions.add(name)
-                logger.debug(f"Registered function: {name}")
-            except Exception as e:
-                logger.error(f"Failed to register function {name}: {str(e)}")
-                raise FlowError(f"Function registration failed: {str(e)}") from e
+            new_functions.add(name)
+            logger.debug(f"Registered function: {name}")
+        except Exception as e:
+            logger.error(f"Failed to register function {name}: {str(e)}")
+            raise FlowError(f"Function registration failed: {str(e)}") from e
 
     async def set_node_from_config(self, node_config: NodeConfig) -> None:
         """Set up a new conversation node and transition to it.
