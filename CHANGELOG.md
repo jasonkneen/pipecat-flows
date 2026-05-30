@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [1.2.0] - 2026-05-29
+
+### Changed
+
+- Migrated to Pipecat 1.3.0's worker model. `FlowManager` now accepts a
+  `worker` (`PipelineWorker`) argument and exposes a `worker` property. The
+  `task` argument and the `FlowManager.task` property are deprecated but
+  continue to work (a `PipelineTask` is now a `PipelineWorker`), so existing
+  code is unaffected. Examples were updated to use `PipelineWorker` and
+  `WorkerRunner` with `runner.add_workers(worker)` + `runner.run()` (#277).
+  (PR [#277](https://github.com/pipecat-ai/pipecat-flows/pull/277))
+
 ## [1.1.1] - 2026-05-27
 
 ### Fixed
