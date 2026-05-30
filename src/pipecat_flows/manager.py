@@ -41,7 +41,7 @@ from pipecat.frames.frames import (
     LLMUpdateSettingsFrame,
 )
 from pipecat.pipeline.llm_switcher import LLMSwitcher
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext, NotGiven
 from pipecat.services.llm_service import FunctionCallParams, LLMService
 from pipecat.services.settings import LLMSettings
@@ -88,9 +88,10 @@ class FlowManager:
     def __init__(
         self,
         *,
-        task: PipelineTask,
         llm: LLMService | LLMSwitcher,
         context_aggregator: Any,
+        worker: PipelineWorker | None = None,
+        task: PipelineWorker | None = None,
         context_strategy: ContextStrategyConfig | None = None,
         transport: BaseTransport | None = None,
         global_functions: list[FlowsFunctionSchema | FlowsDirectFunction] | None = None,
@@ -98,9 +99,14 @@ class FlowManager:
         """Initialize the flow manager.
 
         Args:
-            task: PipelineTask instance for queueing frames.
             llm: LLM service or LLMSwitcher.
             context_aggregator: Context aggregator for updating user context.
+            worker: PipelineWorker instance for queueing frames.
+            task: PipelineWorker instance for queueing frames.
+
+                .. deprecated:: 1.2.0
+                    Use ``worker`` instead. ``task`` will be removed in a future release.
+
             context_strategy: Context strategy configuration for managing conversation
                 context during transitions.
             transport: Transport instance for communication.
@@ -109,9 +115,22 @@ class FlowManager:
                 during initialization and automatically included alongside node-specific
                 functions.
         """
-        self._task = task
+        if worker is not None and task is not None:
+            raise ValueError("Pass either 'worker' or 'task' (deprecated), not both.")
+        if task is not None:
+            warnings.warn(
+                "'task' is deprecated and will be removed in a future release; "
+                "use 'worker' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            worker = task
+        if worker is None:
+            raise ValueError("FlowManager requires a 'worker' (PipelineWorker).")
+
+        self._worker = worker
         self._llm = llm
-        self._action_manager = ActionManager(task, flow_manager=self)
+        self._action_manager = ActionManager(worker, flow_manager=self)
         self._adapter = LLMAdapter()
         self._initialized = False
         self._context_aggregator = context_aggregator
@@ -130,6 +149,7 @@ class FlowManager:
         self._showed_deprecation_warning_for_reset_with_summary = False
         self._showed_deprecation_warning_for_zero_arg_handler = False
         self._showed_deprecation_warning_for_legacy_handler = False
+        self._showed_deprecation_warning_for_task = False
 
     @property
     def state(self) -> dict[str, Any]:
@@ -226,15 +246,15 @@ class FlowManager:
         return self._current_node
 
     @property
-    def task(self) -> PipelineTask:
-        """Access the pipeline task instance for frame queueing.
+    def worker(self) -> PipelineWorker:
+        """Access the pipeline worker instance for frame queueing.
 
-        This property provides access to the PipelineTask instance used by the
-        FlowManager. The task can be used to queue custom frames directly into
+        This property provides access to the PipelineWorker instance used by the
+        FlowManager. The worker can be used to queue custom frames directly into
         the pipeline, enabling advanced flow control and custom frame injection.
 
         Returns:
-            PipelineTask: The pipeline task instance used for frame processing
+            PipelineWorker: The pipeline worker instance used for frame processing
                 and queueing operations.
 
         Examples:
@@ -244,11 +264,32 @@ class FlowManager:
                     from pipecat.frames.frames import TTSUpdateSettingsFrame
 
                     # Queue a TTS settings update frame
-                    await task.queue_frame(
+                    await flow_manager.worker.queue_frame(
                         TTSUpdateSettingsFrame(settings={"voice": "your-new-voice-id"})
                     )
         """
-        return self._task
+        return self._worker
+
+    @property
+    def task(self) -> PipelineWorker:
+        """Access the pipeline worker instance for frame queueing.
+
+        .. deprecated:: 1.2.0
+            Use :attr:`worker` instead. This property will be removed in a future release.
+
+        Returns:
+            PipelineWorker: The pipeline worker instance used for frame processing
+                and queueing operations.
+        """
+        if not self._showed_deprecation_warning_for_task:
+            self._showed_deprecation_warning_for_task = True
+            warnings.warn(
+                "'FlowManager.task' is deprecated and will be removed in a future release; "
+                "use 'FlowManager.worker' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return self._worker
 
     async def initialize(self, initial_node: NodeConfig | None = None) -> None:
         """Initialize the flow manager.
@@ -715,7 +756,7 @@ class FlowManager:
             # Trigger completion with new context
             respond_immediately = node_config.get("respond_immediately", True)
             if respond_immediately:
-                await self._task.queue_frames([LLMRunFrame()])
+                await self._worker.queue_frames([LLMRunFrame()])
 
             # Execute post-actions if any
             if post_actions := node_config.get("post_actions"):
@@ -845,7 +886,7 @@ class FlowManager:
             frames.append(frame_type(messages=messages))
             frames.append(LLMSetToolsFrame(tools=functions))
 
-            await self._task.queue_frames(frames)
+            await self._worker.queue_frames(frames)
 
             logger.debug(
                 f"Updated LLM context using {frame_type.__name__} with strategy {update_config.strategy}"

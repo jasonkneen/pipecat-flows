@@ -92,7 +92,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
         self.mock_llm.run_inference.return_value = mock_summary
 
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
             context_strategy=ContextStrategyConfig(
@@ -123,7 +123,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
     async def test_default_strategy(self):
         """Test default context strategy (APPEND)."""
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
         )
@@ -147,7 +147,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
     async def test_reset_strategy(self):
         """Test RESET strategy behavior."""
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
             context_strategy=ContextStrategyConfig(strategy=ContextStrategy.RESET),
@@ -171,7 +171,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
         self.mock_llm.run_inference.return_value = mock_summary
 
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
             context_strategy=ContextStrategyConfig(
@@ -196,7 +196,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
     async def test_reset_with_summary_timeout(self):
         """Test RESET_WITH_SUMMARY fallback to APPEND on timeout."""
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
             context_strategy=ContextStrategyConfig(
@@ -226,7 +226,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
 
         # Test OpenAI format
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=OpenAILLMService(api_key=""),
             context_aggregator=self.mock_context_aggregator,
         )
@@ -235,7 +235,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
 
         # Test Anthropic format
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=AnthropicLLMService(api_key=""),
             context_aggregator=self.mock_context_aggregator,
         )
@@ -244,7 +244,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
 
         # Test Gemini format
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=GoogleLLMService(api_key=" "),  # dummy key (GoogleLLMService rejects empty string)
             context_aggregator=self.mock_context_aggregator,
         )
@@ -254,7 +254,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
     async def test_node_level_strategy_override(self):
         """Test that node-level strategy overrides global strategy."""
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
             context_strategy=ContextStrategyConfig(strategy=ContextStrategy.APPEND),
@@ -285,7 +285,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
 
         summary_prompt = "Create a detailed summary"
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
             context_strategy=ContextStrategyConfig(
@@ -321,7 +321,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
         self.mock_llm.run_inference.return_value = mock_summary
 
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
             context_strategy=ContextStrategyConfig(
@@ -358,7 +358,7 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
         self.mock_llm.run_inference.return_value = mock_summary
 
         flow_manager = FlowManager(
-            task=self.mock_task,
+            worker=self.mock_task,
             llm=self.mock_llm,
             context_aggregator=self.mock_context_aggregator,
             context_strategy=ContextStrategyConfig(

@@ -53,8 +53,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
@@ -69,6 +68,7 @@ from pipecat.transports.daily.utils import (
     DailyMeetingTokenProperties,
     DailyRESTHelper,
 )
+from pipecat.workers.runner import WorkerRunner
 from utils import create_llm
 
 from pipecat_flows import ContextStrategyConfig, FlowManager, NodeConfig
@@ -661,7 +661,7 @@ async def main():
             ]
         )
 
-        task = PipelineTask(
+        worker = PipelineWorker(
             pipeline,
             params=PipelineParams(
                 enable_metrics=True,
@@ -671,7 +671,7 @@ async def main():
 
         # Initialize flow manager
         flow_manager = FlowManager(
-            task=task,
+            worker=worker,
             llm=llm,
             context_aggregator=context_aggregator,
             transport=transport,
@@ -712,7 +712,7 @@ async def main():
                 if v.get("info", {}).get("userId") in {"agent", "customer"}
             }
             if not human_participants:
-                await task.cancel()
+                await worker.cancel()
 
         # Print URL for joining as customer, and store URL for joining as human agent, to be printed later
         customer_token = await get_customer_token(
@@ -754,8 +754,9 @@ async def main():
         atexit.register(cleanup_hold_music_process)
 
         # Run the pipeline
-        runner = PipelineRunner()
-        await runner.run(task)
+        runner = WorkerRunner()
+        await runner.add_workers(worker)
+        await runner.run()
 
 
 if __name__ == "__main__":

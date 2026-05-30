@@ -37,7 +37,7 @@ from pipecat.frames.frames import (
     EndFrame,
     TTSSpeakFrame,
 )
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.worker import PipelineWorker
 
 from pipecat_flows.exceptions import ActionError
 from pipecat_flows.types import ActionConfig, FlowActionHandler
@@ -85,15 +85,15 @@ class ActionManager:
     Custom actions can be registered using register_action().
     """
 
-    def __init__(self, task: PipelineTask, flow_manager: "FlowManager"):
+    def __init__(self, worker: PipelineWorker, flow_manager: "FlowManager"):
         """Initialize the action manager.
 
         Args:
-            task: PipelineTask instance used to queue frames.
+            worker: PipelineWorker instance used to queue frames.
             flow_manager: FlowManager instance that this ActionManager is part of.
         """
         self._action_handlers: dict[str, Callable] = {}
-        self._task = task
+        self._worker = worker
         self._flow_manager = flow_manager
         self._ongoing_actions_count = 0
         self._ongoing_actions_finished_event = asyncio.Event()
@@ -106,12 +106,12 @@ class ActionManager:
         self._register_action("function", self._handle_function_action)
 
         # Add pipeline observation
-        task.set_reached_downstream_filter(
+        worker.set_reached_downstream_filter(
             (ActionFinishedFrame, FunctionActionFrame, BotStoppedSpeakingFrame)
         )
 
-        @task.event_handler("on_frame_reached_downstream")
-        async def on_frame_reached_downstream(task, frame):
+        @worker.event_handler("on_frame_reached_downstream")
+        async def on_frame_reached_downstream(worker, frame):
             if isinstance(frame, FunctionActionFrame):
                 # Run function action
                 await frame.function(frame.action, flow_manager)
@@ -315,10 +315,10 @@ class ActionManager:
             self._increment_ongoing_actions_count()
 
             # Queue the action frame
-            await self._task.queue_frame(TTSSpeakFrame(text=text))
+            await self._worker.queue_frame(TTSSpeakFrame(text=text))
 
             # Queue a frame marking the end of the action
-            await self._task.queue_frame(ActionFinishedFrame())
+            await self._worker.queue_frame(ActionFinishedFrame())
         except Exception as e:
             self._decrement_ongoing_actions_count()
             logger.error(f"TTS error: {e}")
@@ -338,8 +338,8 @@ class ActionManager:
 
         # Queue the action frames
         if action.get("text"):  # Optional goodbye message
-            await self._task.queue_frame(TTSSpeakFrame(text=action["text"]))
-        await self._task.queue_frame(EndFrame())
+            await self._worker.queue_frame(TTSSpeakFrame(text=action["text"]))
+        await self._worker.queue_frame(EndFrame())
 
         # NOTE: there's no point queueing an ActionFinishedFrame here, since the previously-queued
         # EndFrame ensures that it'll never get delivered to our observer
@@ -365,7 +365,7 @@ class ActionManager:
 
         # Queue the action frame (we're queueing rather than running it here to ensure it happens
         # at the appropriate time in the pipeline, like when the bot's turn is over, for example).
-        await self._task.queue_frame(FunctionActionFrame(action=action, function=handler))
+        await self._worker.queue_frame(FunctionActionFrame(action=action, function=handler))
 
         # NOTE: we do NOT queue an ActionFinishedFrame here; instead, we will decrement the ongoing
         # actions count when the function has finished executing (the function may take some time)
