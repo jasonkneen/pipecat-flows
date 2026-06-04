@@ -21,6 +21,7 @@ mocked dependencies for PipelineTask.
 
 import asyncio
 import unittest
+import warnings
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -29,6 +30,7 @@ from pipecat_flows.exceptions import ActionError
 from tests.test_helpers import (
     assert_end_frame_queued,
     assert_tts_speak_frames_queued,
+    get_queued_tts_speak_frames,
     make_mock_task,
 )
 
@@ -97,6 +99,77 @@ class TestActionManager(unittest.IsolatedAsyncioTestCase):
 
         # Verify EndFrame
         assert_end_frame_queued(self.mock_task)
+
+    async def test_tts_action_append_text_to_context(self):
+        """Test that tts_say maps append_text_to_context onto the TTSSpeakFrame."""
+        # Explicitly True
+        await self.action_manager.execute_actions(
+            [{"type": "tts_say", "text": "Hello", "append_text_to_context": True}]
+        )
+        frames = get_queued_tts_speak_frames(self.mock_task)
+        self.assertEqual(len(frames), 1)
+        self.assertIs(frames[0].append_to_context, True)
+
+        # Explicitly False
+        self.mock_task.queue_frame.reset_mock()
+        await self.action_manager.execute_actions(
+            [{"type": "tts_say", "text": "Hello", "append_text_to_context": False}]
+        )
+        frames = get_queued_tts_speak_frames(self.mock_task)
+        self.assertEqual(len(frames), 1)
+        self.assertIs(frames[0].append_to_context, False)
+
+        # Omitted: Flows applies its own default of True (and never passes None,
+        # so no append_to_context deprecation warning fires).
+        self.mock_task.queue_frame.reset_mock()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            await self.action_manager.execute_actions([{"type": "tts_say", "text": "Hello"}])
+        frames = get_queued_tts_speak_frames(self.mock_task)
+        self.assertEqual(len(frames), 1)
+        self.assertIs(frames[0].append_to_context, True)
+        self.assertEqual(
+            [w for w in caught if "append_to_context" in str(w.message)],
+            [],
+            "Flows must not pass None to TTSSpeakFrame",
+        )
+
+    async def test_end_conversation_append_text_to_context(self):
+        """Test that end_conversation maps append_text_to_context onto its goodbye frame."""
+        # Explicitly False
+        await self.action_manager.execute_actions(
+            [{"type": "end_conversation", "text": "Goodbye!", "append_text_to_context": False}]
+        )
+        frames = get_queued_tts_speak_frames(self.mock_task)
+        self.assertEqual(len(frames), 1)
+        self.assertIs(frames[0].append_to_context, False)
+        assert_end_frame_queued(self.mock_task)
+
+        # Explicitly True
+        self.mock_task.queue_frame.reset_mock()
+        await self.action_manager.execute_actions(
+            [{"type": "end_conversation", "text": "Goodbye!", "append_text_to_context": True}]
+        )
+        frames = get_queued_tts_speak_frames(self.mock_task)
+        self.assertEqual(len(frames), 1)
+        self.assertIs(frames[0].append_to_context, True)
+
+        # Omitted: Flows applies its own default of True (and never passes None,
+        # so no append_to_context deprecation warning fires).
+        self.mock_task.queue_frame.reset_mock()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            await self.action_manager.execute_actions(
+                [{"type": "end_conversation", "text": "Goodbye!"}]
+            )
+        frames = get_queued_tts_speak_frames(self.mock_task)
+        self.assertEqual(len(frames), 1)
+        self.assertIs(frames[0].append_to_context, True)
+        self.assertEqual(
+            [w for w in caught if "append_to_context" in str(w.message)],
+            [],
+            "Flows must not pass None to TTSSpeakFrame",
+        )
 
     async def test_function_actions(self):
         """Test executing function actions."""

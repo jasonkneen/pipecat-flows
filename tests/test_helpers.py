@@ -19,6 +19,17 @@ def assert_tts_speak_frames_queued(mock_task, expected_texts):
         )
 
 
+def get_queued_tts_speak_frames(mock_task):
+    """Return the TTSSpeakFrames queued on the mock task, in order."""
+    from pipecat.frames.frames import TTSSpeakFrame
+
+    return [
+        call[0][0]
+        for call in mock_task.queue_frame.call_args_list
+        if isinstance(call[0][0], TTSSpeakFrame)
+    ]
+
+
 def assert_end_frame_queued(mock_task):
     """Assert that an EndFrame was queued."""
     from pipecat.frames.frames import EndFrame

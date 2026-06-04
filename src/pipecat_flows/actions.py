@@ -303,7 +303,10 @@ class ActionManager:
         """Built-in handler for TTS actions.
 
         Args:
-            action: Action configuration containing 'text' to speak.
+            action: Action configuration dictionary. Required 'text' key with
+                the text to speak. Optional 'append_text_to_context' key (bool)
+                controlling whether the spoken text is appended to the LLM
+                context. Defaults to True.
         """
         text = action.get("text")
         if not text:
@@ -314,8 +317,13 @@ class ActionManager:
             # Mark that we're starting the action
             self._increment_ongoing_actions_count()
 
-            # Queue the action frame
-            await self._worker.queue_frame(TTSSpeakFrame(text=text))
+            # Queue the action frame. Default to appending the spoken text to the
+            # context; callers opt out with append_text_to_context=False.
+            await self._worker.queue_frame(
+                TTSSpeakFrame(
+                    text=text, append_to_context=action.get("append_text_to_context", True)
+                )
+            )
 
             # Queue a frame marking the end of the action
             await self._worker.queue_frame(ActionFinishedFrame())
@@ -331,14 +339,23 @@ class ActionManager:
 
         Args:
             action: Action configuration dictionary. Optional 'text' key for a
-                goodbye message.
+                goodbye message. Optional 'append_text_to_context' key (bool)
+                controlling whether that goodbye text is appended to the LLM
+                context. Defaults to True.
         """
         # Mark that we're starting the action
         self._increment_ongoing_actions_count()
 
         # Queue the action frames
         if action.get("text"):  # Optional goodbye message
-            await self._worker.queue_frame(TTSSpeakFrame(text=action["text"]))
+            # Default to appending the goodbye text to the context; callers opt
+            # out with append_text_to_context=False.
+            await self._worker.queue_frame(
+                TTSSpeakFrame(
+                    text=action["text"],
+                    append_to_context=action.get("append_text_to_context", True),
+                )
+            )
         await self._worker.queue_frame(EndFrame())
 
         # NOTE: there's no point queueing an ActionFinishedFrame here, since the previously-queued

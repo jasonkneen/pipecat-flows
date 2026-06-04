@@ -115,7 +115,11 @@ class ActionConfig(TypedDict, total=False):
     Parameters:
         type: Action type identifier (e.g. "tts_say", "notify_slack").
         handler: Callable to handle the action.
-        text: Text for tts_say action.
+        text: Text to speak for the "tts_say" action, or the optional goodbye
+            message for the "end_conversation" action.
+        append_text_to_context: For the built-in TTS actions ("tts_say" and
+            "end_conversation"), whether the spoken ``text`` is appended to the
+            LLM context. Defaults to True.
 
     Note:
         Additional fields are allowed and passed to the handler.
@@ -124,6 +128,7 @@ class ActionConfig(TypedDict, total=False):
     type: Required[str]
     handler: LegacyActionHandler | FlowActionHandler
     text: str
+    append_text_to_context: bool
 
 
 class ContextStrategy(Enum):
