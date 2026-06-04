@@ -762,15 +762,15 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
             settings_frames[0].delta.system_instruction, "You are a helpful assistant."
         )
 
-        # Verify UpdateFrame contains only task_messages (not role_messages)
-        update_frames = [f for f in first_frames if isinstance(f, LLMMessagesUpdateFrame)]
-        self.assertEqual(len(update_frames), 1)
-        self.assertEqual(update_frames[0].messages, first_node["task_messages"])
+        # Verify AppendFrame contains only task_messages (not role_messages)
+        append_frames = [f for f in first_frames if isinstance(f, LLMMessagesAppendFrame)]
+        self.assertEqual(len(append_frames), 1)
+        self.assertEqual(append_frames[0].messages, first_node["task_messages"])
 
-        # Verify frame ordering: LLMUpdateSettingsFrame before LLMMessagesUpdateFrame
+        # Verify frame ordering: LLMUpdateSettingsFrame before LLMMessagesAppendFrame
         settings_idx = first_frames.index(settings_frames[0])
-        update_idx = first_frames.index(update_frames[0])
-        self.assertLess(settings_idx, update_idx)
+        append_idx = first_frames.index(append_frames[0])
+        self.assertLess(settings_idx, append_idx)
 
         # Reset mock and set second node
         self.mock_task.queue_frames.reset_mock()
@@ -788,7 +788,11 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(append_frames[0].messages, second_node["task_messages"])
 
     async def test_frame_type_selection(self):
-        """Test that correct frame types are used based on node order."""
+        """Test that the context-update frame type follows the context strategy.
+
+        Under the default (APPEND) strategy, the context update appends for
+        every node.
+        """
         flow_manager = FlowManager(
             worker=self.mock_task,
             llm=self.mock_llm,
@@ -801,23 +805,23 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
             "functions": [],
         }
 
-        # First node should use UpdateFrame
+        # Under the default strategy the first node appends.
         await flow_manager.set_node_from_config(test_node)
         first_call = self.mock_task.queue_frames.call_args_list[0]  # Get first call
         first_frames = first_call[0][0]
         self.assertTrue(
-            any(isinstance(f, LLMMessagesUpdateFrame) for f in first_frames),
-            "First node should use UpdateFrame",
+            any(isinstance(f, LLMMessagesAppendFrame) for f in first_frames),
+            "First node should use AppendFrame under the default strategy",
         )
         self.assertFalse(
-            any(isinstance(f, LLMMessagesAppendFrame) for f in first_frames),
-            "First node should not use AppendFrame",
+            any(isinstance(f, LLMMessagesUpdateFrame) for f in first_frames),
+            "First node should not use UpdateFrame under the default strategy",
         )
 
         # Reset mock
         self.mock_task.queue_frames.reset_mock()
 
-        # Second node should use AppendFrame
+        # Subsequent node should also use AppendFrame
         await flow_manager.set_node_from_config(test_node)
         first_call = self.mock_task.queue_frames.call_args_list[0]  # Get first call
         second_frames = first_call[0][0]
@@ -1149,9 +1153,9 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
         )
 
         # Verify messages frame contains only task_messages
-        update_frames = [f for f in first_frames if isinstance(f, LLMMessagesUpdateFrame)]
-        self.assertEqual(len(update_frames), 1)
-        self.assertEqual(update_frames[0].messages, node["task_messages"])
+        append_frames = [f for f in first_frames if isinstance(f, LLMMessagesAppendFrame)]
+        self.assertEqual(len(append_frames), 1)
+        self.assertEqual(append_frames[0].messages, node["task_messages"])
 
     async def test_role_messages_persist_across_reset(self):
         """Test that system instruction persists when a RESET node omits role_message."""
@@ -1237,10 +1241,10 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
         settings_frames = [f for f in first_frames if isinstance(f, LLMUpdateSettingsFrame)]
         self.assertEqual(len(settings_frames), 0)
 
-        update_frames = [f for f in first_frames if isinstance(f, LLMMessagesUpdateFrame)]
-        self.assertEqual(len(update_frames), 1)
+        append_frames = [f for f in first_frames if isinstance(f, LLMMessagesAppendFrame)]
+        self.assertEqual(len(append_frames), 1)
         self.assertEqual(
-            update_frames[0].messages[0],
+            append_frames[0].messages[0],
             {"role": "developer", "content": "You are a helpful assistant."},
         )
 
@@ -1315,9 +1319,9 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(settings_frames), 0)
 
         # Legacy role_messages should be prepended to context messages
-        update_frames = [f for f in first_frames if isinstance(f, LLMMessagesUpdateFrame)]
-        self.assertEqual(len(update_frames), 1)
-        messages = update_frames[0].messages
+        append_frames = [f for f in first_frames if isinstance(f, LLMMessagesAppendFrame)]
+        self.assertEqual(len(append_frames), 1)
+        messages = append_frames[0].messages
         self.assertEqual(
             messages[0], {"role": "developer", "content": "You are a helpful assistant."}
         )

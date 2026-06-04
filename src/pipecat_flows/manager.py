@@ -874,11 +874,13 @@ class FlowManager:
             # Add task messages
             messages.extend(task_messages)
 
-            # For first node or RESET/RESET_WITH_SUMMARY strategy, use update frame
+            # Use an "update" (replace) frame for the RESET/RESET_WITH_SUMMARY
+            # strategies; otherwise append. (Note that even the first node follows
+            # the same rule: appending ensures any prior context contributions,
+            # such as by tts_say pre-actions, is preserved rather than replaced).
             frame_type = (
                 LLMMessagesUpdateFrame
-                if self._current_node is None
-                or update_config.strategy
+                if update_config.strategy
                 in [ContextStrategy.RESET, ContextStrategy.RESET_WITH_SUMMARY]
                 else LLMMessagesAppendFrame
             )
