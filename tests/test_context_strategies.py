@@ -129,11 +129,13 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
         )
         await flow_manager.initialize()
 
-        # First node should use UpdateFrame regardless of strategy
+        # Under the default (APPEND) strategy the first node appends, keeping any
+        # context already present.
         await flow_manager._set_node("first", self.sample_node)
         first_call = self.mock_task.queue_frames.call_args_list[0]
         first_frames = first_call[0][0]
-        self.assertTrue(any(isinstance(f, LLMMessagesUpdateFrame) for f in first_frames))
+        self.assertTrue(any(isinstance(f, LLMMessagesAppendFrame) for f in first_frames))
+        self.assertFalse(any(isinstance(f, LLMMessagesUpdateFrame) for f in first_frames))
 
         # Reset mock
         self.mock_task.queue_frames.reset_mock()
@@ -154,8 +156,11 @@ class TestContextStrategies(unittest.IsolatedAsyncioTestCase):
         )
         await flow_manager.initialize()
 
-        # Set initial node
+        # First node should use UpdateFrame under the RESET strategy
         await flow_manager._set_node("first", self.sample_node)
+        first_call = self.mock_task.queue_frames.call_args_list[0]
+        first_frames = first_call[0][0]
+        self.assertTrue(any(isinstance(f, LLMMessagesUpdateFrame) for f in first_frames))
         self.mock_task.queue_frames.reset_mock()
 
         # Second node should use UpdateFrame with RESET strategy
