@@ -26,6 +26,7 @@ See [quickstart/README.md](./quickstart/README.md) for a beginner-friendly intro
 #### Advanced Features
 
 - `warm_transfer.py` - Transferring calls between different flows (DailyTransport only)
+- `multi_worker_handoff.py` - Composing Flows with Pipecat's multi-worker framework: a structured Flows reservation worker hands off to and from a free-form `LLMWorker` router over the bus, sharing a single conversation context
 
 **Note:** All examples support multiple LLM providers (OpenAI, Anthropic, Google, AWS Bedrock) and transport options unless otherwise specified. Pipecat Flows handles the different function calling formats internally while maintaining a consistent API for developers.
 
