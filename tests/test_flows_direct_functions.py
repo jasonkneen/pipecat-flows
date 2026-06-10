@@ -14,6 +14,7 @@ from pipecat_flows.types import (
     ConsolidatedFunctionResult,
     FlowsDirectFunctionWrapper,
     flows_direct_function,
+    flows_tool_options,
 )
 
 """Tests for FlowsDirectFunction class."""
@@ -275,7 +276,7 @@ class TestFlowsDirectFunctionDecorator(unittest.TestCase):
     def test_cancel_on_interruption_can_be_set_to_false(self):
         """Test that cancel_on_interruption can be set to False via decorator."""
 
-        @flows_direct_function(cancel_on_interruption=False)
+        @flows_tool_options(cancel_on_interruption=False)
         async def my_function(flow_manager: FlowManager):
             return {"status": "success"}, None
 
@@ -285,7 +286,7 @@ class TestFlowsDirectFunctionDecorator(unittest.TestCase):
     def test_cancel_on_interruption_can_be_explicitly_set_to_true(self):
         """Test that cancel_on_interruption can be explicitly set to True via decorator."""
 
-        @flows_direct_function(cancel_on_interruption=True)
+        @flows_tool_options(cancel_on_interruption=True)
         async def my_function(flow_manager: FlowManager):
             return {"status": "success"}, None
 
@@ -295,7 +296,7 @@ class TestFlowsDirectFunctionDecorator(unittest.TestCase):
     def test_decorator_preserves_function_metadata(self):
         """Test that the decorator preserves function name and docstring."""
 
-        @flows_direct_function(cancel_on_interruption=False)
+        @flows_tool_options(cancel_on_interruption=False)
         async def my_decorated_function(flow_manager: FlowManager, name: str):
             """This is a decorated function.
 
@@ -325,7 +326,7 @@ class TestFlowsDirectFunctionDecorator(unittest.TestCase):
     def test_timeout_secs_can_be_set(self):
         """Test that timeout_secs can be set via decorator."""
 
-        @flows_direct_function(timeout_secs=30)
+        @flows_tool_options(timeout_secs=30)
         async def my_function(flow_manager: FlowManager):
             return {"status": "success"}, None
 
@@ -335,7 +336,7 @@ class TestFlowsDirectFunctionDecorator(unittest.TestCase):
     def test_decorator_preserves_function_metadata_with_timeout(self):
         """Test that the decorator preserves function name and docstring with timeout_secs."""
 
-        @flows_direct_function(cancel_on_interruption=False, timeout_secs=15.5)
+        @flows_tool_options(cancel_on_interruption=False, timeout_secs=15.5)
         async def my_decorated_function(flow_manager: FlowManager, name: str):
             """This is a decorated function.
 
@@ -353,6 +354,35 @@ class TestFlowsDirectFunctionDecorator(unittest.TestCase):
         )
         self.assertFalse(func.cancel_on_interruption)
         self.assertEqual(func.timeout_secs, 15.5)
+
+
+class TestFlowsDirectFunctionDeprecatedAlias(unittest.TestCase):
+    """@flows_direct_function is a deprecated alias of @flows_tool_options."""
+
+    def test_alias_warns_but_still_attaches_options(self):
+        with self.assertWarns(DeprecationWarning):
+
+            @flows_direct_function(cancel_on_interruption=True, timeout_secs=42)
+            async def my_function(flow_manager: FlowManager):
+                return {"status": "success"}, None
+
+        # The deprecated alias still configures the same options.
+        func = FlowsDirectFunctionWrapper(function=my_function)
+        self.assertTrue(func.cancel_on_interruption)
+        self.assertEqual(func.timeout_secs, 42)
+
+    def test_tool_options_does_not_warn(self):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+
+            @flows_tool_options(cancel_on_interruption=False, timeout_secs=10)
+            async def my_function(flow_manager: FlowManager):
+                return {"status": "success"}, None
+
+        func = FlowsDirectFunctionWrapper(function=my_function)
+        self.assertEqual(func.timeout_secs, 10)
 
 
 class TestConsolidatedFunctionResult(unittest.TestCase):

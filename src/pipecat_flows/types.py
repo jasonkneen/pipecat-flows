@@ -18,6 +18,7 @@ and function interactions.
 """
 
 import uuid
+import warnings
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -28,7 +29,7 @@ from typing import (
     TypedDict,
 )
 
-from pipecat.adapters.schemas.direct_function import BaseDirectFunctionWrapper
+from pipecat.adapters.schemas.direct_function import BaseDirectFunctionWrapper, tool_options
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 
 from pipecat_flows.exceptions import InvalidFunctionError
@@ -369,13 +370,19 @@ class FlowsFunctionSchema:
         )
 
 
-def flows_direct_function(
+def flows_tool_options(
     *, cancel_on_interruption: bool = False, timeout_secs: float | None = None
 ) -> Callable[[Callable], Callable]:
-    """Decorator to attach additional metadata to a Pipecat direct function.
+    """Configure a Flows direct function's call options.
 
-    This metadata can be used, for example, to store the additional arguments
-    that should be used when registering the function with the Pipecat service.
+    This decorator is optional; use it to override the defaults for a Flows
+    direct function (an async function whose first parameter is ``flow_manager``).
+    The options are read when the function is registered with the Pipecat LLM
+    service.
+
+    It is the Flows-flavored counterpart to Pipecat's ``@tool_options`` and is
+    built on it, attaching the same ``cancel_on_interruption`` / ``timeout_secs``
+    metadata.
 
     Args:
         cancel_on_interruption: Whether to cancel the function call when the user
@@ -388,19 +395,42 @@ def flows_direct_function(
 
     Example::
 
-        @flows_direct_function(cancel_on_interruption=False, timeout_secs=30)
+        @flows_tool_options(cancel_on_interruption=False, timeout_secs=30)
         async def long_running_task(flow_manager: FlowManager, query: str):
             '''Perform a long-running task that should not be cancelled on interruption.'''
             # ... implementation
             return {"status": "complete"}, None
     """
+    return tool_options(cancel_on_interruption=cancel_on_interruption, timeout_secs=timeout_secs)
 
-    def decorator(func: Callable) -> Callable:
-        func._flows_cancel_on_interruption = cancel_on_interruption
-        func._flows_timeout_secs = timeout_secs
-        return func
 
-    return decorator
+def flows_direct_function(
+    *, cancel_on_interruption: bool = False, timeout_secs: float | None = None
+) -> Callable[[Callable], Callable]:
+    """Configure a Flows direct function's call options.
+
+    .. deprecated:: 1.x.0
+        Renamed to :func:`flows_tool_options` to align with Pipecat's
+        ``@tool_options`` and make clearer that it configures call options. This
+        alias still works but will be removed in a future version.
+
+    Args:
+        cancel_on_interruption: Whether to cancel the function call when the user
+            interrupts. Defaults to False.
+        timeout_secs: Optional per-tool timeout in seconds, overriding the global
+            ``function_call_timeout_secs``. Defaults to None (use global timeout).
+
+    Returns:
+        A decorator that attaches the metadata to the function.
+    """
+    warnings.warn(
+        "`@flows_direct_function` is deprecated, use `@flows_tool_options` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return flows_tool_options(
+        cancel_on_interruption=cancel_on_interruption, timeout_secs=timeout_secs
+    )
 
 
 class FlowsDirectFunctionWrapper(BaseDirectFunctionWrapper):
@@ -440,10 +470,13 @@ class FlowsDirectFunctionWrapper(BaseDirectFunctionWrapper):
     def _initialize_metadata(self):
         """Initialize metadata from function signature, docstring, and decorator."""
         super()._initialize_metadata()
-        # Read Flows-specific metadata from decorator (falling back to fields'
-        # defaults for backward compatibility)
-        self.cancel_on_interruption = getattr(self.function, "_flows_cancel_on_interruption", False)
-        self.timeout_secs = getattr(self.function, "_flows_timeout_secs", None)
+        # Read the call options attached by @flows_tool_options (built on Pipecat's
+        # @tool_options, which stores them under the _pipecat_* attributes). Fall
+        # back to Flows' defaults when the function is undecorated.
+        self.cancel_on_interruption = getattr(
+            self.function, "_pipecat_cancel_on_interruption", False
+        )
+        self.timeout_secs = getattr(self.function, "_pipecat_timeout_secs", None)
 
     async def invoke(self, args: Mapping[str, Any], flow_manager: "FlowManager"):
         """Invoke the wrapped function with the provided arguments.
