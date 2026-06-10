@@ -377,12 +377,6 @@ def flows_tool_options(
 
     This decorator is optional; use it to override the defaults for a Flows
     direct function (an async function whose first parameter is ``flow_manager``).
-    The options are read when the function is registered with the Pipecat LLM
-    service.
-
-    It is the Flows-flavored counterpart to Pipecat's ``@tool_options`` and is
-    built on it, attaching the same ``cancel_on_interruption`` / ``timeout_secs``
-    metadata.
 
     Args:
         cancel_on_interruption: Whether to cancel the function call when the user
