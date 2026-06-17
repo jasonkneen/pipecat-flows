@@ -6,8 +6,8 @@
 
 """A patient intake flow example for Pipecat Flows.
 
-This example demonstrates a medical intake system using flows where
-conversation paths are determined at runtime. The flow handles:
+This example demonstrates a medical intake system using flows with direct
+functions where conversation paths are determined at runtime. The flow handles:
 
 1. Patient identity verification through birthday
 2. Prescription collection
@@ -53,9 +53,7 @@ from utils import create_llm
 from pipecat_flows import (
     ContextStrategy,
     ContextStrategyConfig,
-    FlowArgs,
     FlowManager,
-    FlowsFunctionSchema,
     NodeConfig,
 )
 
@@ -116,12 +114,15 @@ class VisitReasonRecordResult(TypedDict):
     count: int
 
 
-# Function handlers
+# Functions
 async def verify_birthday(
-    args: FlowArgs, flow_manager: FlowManager
+    flow_manager: FlowManager, birthday: str
 ) -> tuple[BirthdayVerificationResult, NodeConfig]:
-    """Handler for birthday verification."""
-    birthday = args["birthday"]
+    """Verify the user has provided their correct birthday. Once confirmed, the next step is to record the user's prescriptions.
+
+    Args:
+        birthday (str): The user's birthdate (convert to YYYY-MM-DD format).
+    """
     # In a real app, this would verify against patient records
     is_valid = birthday == "1983-01-01"
 
@@ -133,11 +134,13 @@ async def verify_birthday(
 
 
 async def record_prescriptions(
-    args: FlowArgs, flow_manager: FlowManager
+    flow_manager: FlowManager, prescriptions: list[dict]
 ) -> tuple[PrescriptionRecordResult, NodeConfig]:
-    """Handler for recording prescriptions."""
-    prescriptions: list[Prescription] = args["prescriptions"]
+    """Record the user's prescriptions. Once confirmed, the next step is to collect allergy information.
 
+    Args:
+        prescriptions (list[dict]): List of prescription objects, each with "medication" (str, the medication's name) and "dosage" (str, the prescription's dosage).
+    """
     # Store prescriptions in flow state
     flow_manager.state["prescriptions"] = prescriptions
 
@@ -146,11 +149,13 @@ async def record_prescriptions(
 
 
 async def record_allergies(
-    args: FlowArgs, flow_manager: FlowManager
+    flow_manager: FlowManager, allergies: list[dict]
 ) -> tuple[AllergyRecordResult, NodeConfig]:
-    """Handler for recording allergies."""
-    allergies: list[Allergy] = args["allergies"]
+    """Record the user's allergies. Once confirmed, then next step is to collect medical conditions.
 
+    Args:
+        allergies (list[dict]): List of allergy objects, each with "name" (str, what the user is allergic to).
+    """
     # Store allergies in flow state
     flow_manager.state["allergies"] = allergies
 
@@ -159,11 +164,13 @@ async def record_allergies(
 
 
 async def record_conditions(
-    args: FlowArgs, flow_manager: FlowManager
+    flow_manager: FlowManager, conditions: list[dict]
 ) -> tuple[ConditionRecordResult, NodeConfig]:
-    """Handler for recording medical conditions."""
-    conditions: list[Condition] = args["conditions"]
+    """Record the user's medical conditions. Once confirmed, the next step is to collect visit reasons.
 
+    Args:
+        conditions (list[dict]): List of condition objects, each with "name" (str, the user's medical condition).
+    """
     # Store conditions in flow state
     flow_manager.state["conditions"] = conditions
 
@@ -172,11 +179,13 @@ async def record_conditions(
 
 
 async def record_visit_reasons(
-    args: FlowArgs, flow_manager: FlowManager
+    flow_manager: FlowManager, visit_reasons: list[dict]
 ) -> tuple[VisitReasonRecordResult, NodeConfig]:
-    """Handler for recording visit reasons."""
-    visit_reasons: list[VisitReason] = args["visit_reasons"]
+    """Record the reasons for their visit. Once confirmed, the next step is to verify all information.
 
+    Args:
+        visit_reasons (list[dict]): List of visit reason objects, each with "name" (str, the user's reason for visiting).
+    """
     # Store visit reasons in flow state
     flow_manager.state["visit_reasons"] = visit_reasons
 
@@ -184,37 +193,24 @@ async def record_visit_reasons(
     return VisitReasonRecordResult(count=len(visit_reasons)), create_verification_node()
 
 
-async def revise_information(args: FlowArgs, flow_manager: FlowManager) -> tuple[None, NodeConfig]:
-    """Handler to restart the information-gathering process."""
+async def revise_information(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+    """Return to prescriptions to revise information."""
     return None, create_prescriptions_node()
 
 
-async def confirm_information(args: FlowArgs, flow_manager: FlowManager) -> tuple[None, NodeConfig]:
-    """Handler to confirm all collected information."""
+async def confirm_information(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+    """Proceed with confirmed information."""
     return None, create_confirmation_node()
 
 
-async def complete_intake(args: FlowArgs, flow_manager: FlowManager) -> tuple[None, NodeConfig]:
-    """Handler to complete the intake process."""
+async def complete_intake(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+    """Complete the intake process."""
     return None, create_end_node()
 
 
 # Node creation functions
 def create_initial_node() -> NodeConfig:
     """Create the initial node for patient identity verification."""
-    verify_birthday_func = FlowsFunctionSchema(
-        name="verify_birthday",
-        handler=verify_birthday,
-        description="Verify the user has provided their correct birthday. Once confirmed, the next step is to record the user's prescriptions.",
-        properties={
-            "birthday": {
-                "type": "string",
-                "description": "The user's birthdate (convert to YYYY-MM-DD format)",
-            }
-        },
-        required=["birthday"],
-    )
-
     return NodeConfig(
         name="start",
         role_message="You are Jessica, an agent for Tri-County Health Services. You must ALWAYS use one of the available functions to progress the conversation. Be professional but friendly.",
@@ -224,38 +220,12 @@ def create_initial_node() -> NodeConfig:
                 "content": "Start by introducing yourself to Chad Bailey, then ask for their date of birth, including the year. Once they provide their birthday, use verify_birthday to check it. If verified (1983-01-01), proceed to prescriptions.",
             }
         ],
-        functions=[verify_birthday_func],
+        functions=[verify_birthday],
     )
 
 
 def create_prescriptions_node() -> NodeConfig:
     """Create the prescriptions collection node."""
-    record_prescriptions_func = FlowsFunctionSchema(
-        name="record_prescriptions",
-        handler=record_prescriptions,
-        description="Record the user's prescriptions. Once confirmed, the next step is to collect allergy information.",
-        properties={
-            "prescriptions": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "medication": {
-                            "type": "string",
-                            "description": "The medication's name",
-                        },
-                        "dosage": {
-                            "type": "string",
-                            "description": "The prescription's dosage",
-                        },
-                    },
-                    "required": ["medication", "dosage"],
-                },
-            }
-        },
-        required=["prescriptions"],
-    )
-
     return NodeConfig(
         name="get_prescriptions",
         role_message="You are Jessica, an agent for Tri-County Health Services. You must ALWAYS use one of the available functions to progress the conversation. Be professional but friendly.",
@@ -266,34 +236,12 @@ def create_prescriptions_node() -> NodeConfig:
             }
         ],
         context_strategy=ContextStrategyConfig(strategy=ContextStrategy.RESET),
-        functions=[record_prescriptions_func],
+        functions=[record_prescriptions],
     )
 
 
 def create_allergies_node() -> NodeConfig:
     """Create the allergies collection node."""
-    record_allergies_func = FlowsFunctionSchema(
-        name="record_allergies",
-        handler=record_allergies,
-        description="Record the user's allergies. Once confirmed, then next step is to collect medical conditions.",
-        properties={
-            "allergies": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "What the user is allergic to",
-                        },
-                    },
-                    "required": ["name"],
-                },
-            }
-        },
-        required=["allergies"],
-    )
-
     return NodeConfig(
         name="get_allergies",
         task_messages=[
@@ -302,34 +250,12 @@ def create_allergies_node() -> NodeConfig:
                 "content": "Collect allergy information. Ask about any allergies they have. After recording allergies (or confirming none), proceed to medical conditions.",
             }
         ],
-        functions=[record_allergies_func],
+        functions=[record_allergies],
     )
 
 
 def create_conditions_node() -> NodeConfig:
     """Create the medical conditions collection node."""
-    record_conditions_func = FlowsFunctionSchema(
-        name="record_conditions",
-        handler=record_conditions,
-        description="Record the user's medical conditions. Once confirmed, the next step is to collect visit reasons.",
-        properties={
-            "conditions": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "The user's medical condition",
-                        },
-                    },
-                    "required": ["name"],
-                },
-            }
-        },
-        required=["conditions"],
-    )
-
     return NodeConfig(
         name="get_conditions",
         task_messages=[
@@ -338,34 +264,12 @@ def create_conditions_node() -> NodeConfig:
                 "content": "Collect medical condition information. Ask about any medical conditions they have. After recording conditions (or confirming none), proceed to visit reasons.",
             }
         ],
-        functions=[record_conditions_func],
+        functions=[record_conditions],
     )
 
 
 def create_visit_reasons_node() -> NodeConfig:
     """Create the visit reasons collection node."""
-    record_visit_reasons_func = FlowsFunctionSchema(
-        name="record_visit_reasons",
-        handler=record_visit_reasons,
-        description="Record the reasons for their visit. Once confirmed, the next step is to verify all information.",
-        properties={
-            "visit_reasons": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "The user's reason for visiting",
-                        },
-                    },
-                    "required": ["name"],
-                },
-            }
-        },
-        required=["visit_reasons"],
-    )
-
     return NodeConfig(
         name="get_visit_reasons",
         task_messages=[
@@ -374,28 +278,12 @@ def create_visit_reasons_node() -> NodeConfig:
                 "content": "Collect information about the reason for their visit. Ask what brings them to the doctor today. After recording their reasons, proceed to verification.",
             }
         ],
-        functions=[record_visit_reasons_func],
+        functions=[record_visit_reasons],
     )
 
 
 def create_verification_node() -> NodeConfig:
     """Create the information verification node with context reset and summary."""
-    revise_information_func = FlowsFunctionSchema(
-        name="revise_information",
-        handler=revise_information,
-        description="Return to prescriptions to revise information",
-        properties={},
-        required=[],
-    )
-
-    confirm_information_func = FlowsFunctionSchema(
-        name="confirm_information",
-        handler=confirm_information,
-        description="Proceed with confirmed information",
-        properties={},
-        required=[],
-    )
-
     return NodeConfig(
         name="verify",
         task_messages=[
@@ -417,20 +305,12 @@ Be thorough in reviewing all details and wait for explicit confirmation.""",
                 "Focus on the specific medical information provided."
             ),
         ),
-        functions=[revise_information_func, confirm_information_func],
+        functions=[revise_information, confirm_information],
     )
 
 
 def create_confirmation_node() -> NodeConfig:
     """Create the final confirmation node."""
-    complete_intake_func = FlowsFunctionSchema(
-        name="complete_intake",
-        handler=complete_intake,
-        description="Complete the intake process",
-        properties={},
-        required=[],
-    )
-
     return NodeConfig(
         name="confirm",
         task_messages=[
@@ -439,7 +319,7 @@ def create_confirmation_node() -> NodeConfig:
                 "content": "Once confirmed, thank them, then use the complete_intake function to end the conversation.",
             }
         ],
-        functions=[complete_intake_func],
+        functions=[complete_intake],
     )
 
 
