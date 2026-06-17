@@ -1,0 +1,36 @@
+# Food ordering, sushi branch. Confirms the other runtime path out of the
+# initial node (choose_sushi) and a node function with an integer arg
+# (select_sushi_order count).
+name: food_ordering_sushi
+
+user: !include _user_audio.yaml
+judge: !include _judge_audio.yaml
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot greets the user and offers to take a food order"
+
+  - user: "I'll have sushi."
+    expect:
+      - event: function_call
+        calls:
+          - name: choose_sushi
+
+  # Transitions to the confirmation node, which reads the order back.
+  - user: "Three California rolls, please."
+    expect:
+      - event: function_call
+        calls:
+          - name: select_sushi_order
+            args: { count: 3, type: california }
+      - event: response
+        eval: "the bot reads back or confirms an order of three California rolls"
+
+  # complete_order transitions to the end node (end_conversation post-action),
+  # so we assert only the function call.
+  - user: "Yes, that's correct, go ahead."
+    expect:
+      - event: function_call
+        calls:
+          - name: complete_order

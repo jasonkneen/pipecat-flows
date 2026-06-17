@@ -1,0 +1,62 @@
+# Patient intake. Walks the full multi-step collection flow, exercising
+# array-of-object function args and the context strategies the example sets:
+# RESET on the prescriptions node and RESET_WITH_SUMMARY on the verification
+# node. The bot greets Chad Bailey and verifies the birthday 1983-01-01.
+name: patient_intake
+
+user: !include _user_audio.yaml
+judge: !include _judge_audio.yaml
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot introduces itself and asks for the patient's date of birth"
+
+  - user: "My birthday is January first, nineteen eighty-three."
+    expect:
+      - event: function_call
+        calls:
+          - name: verify_birthday
+            args: { birthday: "1983-01-01" }
+
+  # Prescriptions node uses context_strategy RESET.
+  - user: "I take Lipitor, twenty milligrams."
+    expect:
+      - event: function_call
+        calls:
+          - name: record_prescriptions
+
+  - user: "I'm allergic to penicillin."
+    expect:
+      - event: function_call
+        calls:
+          - name: record_allergies
+
+  - user: "I have high blood pressure."
+    expect:
+      - event: function_call
+        calls:
+          - name: record_conditions
+
+  - user: "I'm here for a routine checkup."
+    expect:
+      - event: function_call
+        calls:
+          - name: record_visit_reasons
+      - event: response
+        eval: "the bot reviews or summarizes the collected information and asks the patient to confirm"
+
+  # Verification node uses context_strategy RESET_WITH_SUMMARY.
+  - user: "Yes, that's all correct."
+    expect:
+      - event: function_call
+        calls:
+          - name: confirm_information
+
+  # complete_intake transitions to the end node (end_conversation post-action),
+  # so we assert only the function call.
+  - user: "No, that's everything, thank you."
+    expect:
+      - event: function_call
+        calls:
+          - name: complete_intake

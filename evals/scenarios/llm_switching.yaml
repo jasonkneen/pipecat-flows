@@ -1,0 +1,59 @@
+# LLM switching. The bot starts on OpenAI and exposes switch_llm,
+# get_current_weather, and summarize_conversation at a single node. The harness
+# can't observe which provider is active, so this scenario verifies the part
+# that actually breaks: switch_llm fires with the right provider, and
+# tool-calling + responses keep working *after* each switch (the post-switch
+# LLM run that the example pushes a ManuallySwitchServiceFrame upstream to fix).
+#
+# Requires OPENAI_API_KEY, GOOGLE_API_KEY, and ANTHROPIC_API_KEY. The scenario
+# deliberately avoids switching to AWS Bedrock so it doesn't need AWS creds.
+name: llm_switching
+
+user: !include _user_audio.yaml
+judge: !include _judge_audio.yaml
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot greets the user"
+
+  - user: "Please switch to the Anthropic model."
+    expect:
+      - event: function_call
+        calls:
+          - name: switch_llm
+            args: { llm: Anthropic }
+
+  # Tool call on the newly-active provider — proves the post-switch LLM run works.
+  - user: "What's the weather in San Francisco?"
+    expect:
+      - event: function_call
+        calls:
+          - name: get_current_weather
+      - event: response
+        eval: "the bot reports the current weather conditions and temperature"
+
+  - user: "Now switch to Google."
+    expect:
+      - event: function_call
+        calls:
+          - name: switch_llm
+            args: { llm: Google }
+
+  - user: "And what's the weather in Paris?"
+    expect:
+      - event: function_call
+        calls:
+          - name: get_current_weather
+      - event: response
+        eval: "the bot reports the current weather conditions and temperature"
+
+  # summarize_conversation is an edge function that rebuilds the node with
+  # RESET_WITH_SUMMARY, then speaks the summary.
+  - user: "Can you summarize our conversation so far?"
+    expect:
+      - event: function_call
+        calls:
+          - name: summarize_conversation
+      - event: response
+        eval: "the bot gives a summary of the conversation that mentions the weather"

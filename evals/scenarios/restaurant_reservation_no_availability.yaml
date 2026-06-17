@@ -1,0 +1,42 @@
+# Restaurant reservation, conditional-branch path. 7:00 PM is fully booked in
+# the mock system, so check_availability routes to the dynamically-created
+# no_availability node (built with the alternative times). The customer then
+# picks an open slot, which routes to confirmation.
+name: restaurant_reservation_no_availability
+
+user: !include _user_audio.yaml
+judge: !include _judge_audio.yaml
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot greets the customer and asks how many people are in their party"
+
+  - user: "Two people, please."
+    expect:
+      - event: function_call
+        calls:
+          - name: collect_party_size
+            args: { size: 2 }
+
+  - user: "We'd like to come at seven PM."
+    expect:
+      - event: function_call
+        calls:
+          - name: check_availability
+      - event: response
+        eval: "the bot says the requested time is unavailable and offers alternative times"
+
+  - user: "Okay, let's come at six PM instead."
+    expect:
+      - event: function_call
+        calls:
+          - name: check_availability
+      - event: response
+        eval: "the bot confirms a reservation is available at the new time"
+
+  - user: "No, that's everything, thanks."
+    expect:
+      - event: function_call
+        calls:
+          - name: end_conversation

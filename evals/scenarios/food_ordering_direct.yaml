@@ -1,0 +1,37 @@
+# Same food-ordering flow as food_ordering_pizza, but the bot registers its
+# functions via the @flows_tool_options direct-function path (metadata derived
+# from the function signature + docstring). Note the arg name is `pizza_type`
+# here, not `type`.
+name: food_ordering_direct
+
+user: !include _user_audio.yaml
+judge: !include _judge_audio.yaml
+
+turns:
+  - expect:
+      - event: response
+        eval: "the bot greets the user and offers to take a food order"
+
+  - user: "I'd like to order a pizza."
+    expect:
+      - event: function_call
+        calls:
+          - name: choose_pizza
+
+  # Transitions to the confirmation node, which reads the order back.
+  - user: "A large pepperoni please."
+    expect:
+      - event: function_call
+        calls:
+          - name: select_pizza_order
+            args: { size: large, pizza_type: pepperoni }
+      - event: response
+        eval: "the bot reads back or confirms a large pepperoni pizza order"
+
+  # complete_order transitions to the end node (end_conversation post-action),
+  # so we assert only the function call.
+  - user: "That's everything, please confirm my order."
+    expect:
+      - event: function_call
+        calls:
+          - name: complete_order

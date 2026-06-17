@@ -51,3 +51,7 @@ docs/_build/
 
 # uv
 .python-version
+# Eval suite output (logs + recordings)
+evals/eval-runs/
+# Per-scenario logs from `pipecat eval run` (defaults its logs dir to the cwd)
+*.eval.log

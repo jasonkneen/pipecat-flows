@@ -1,0 +1,22 @@
+# Smoke test for the quickstart flow: a single node transition driven by an edge
+# function, followed by the end_conversation post-action.
+name: hello_world
+
+user: !include _user_audio.yaml
+judge: !include _judge_audio.yaml
+
+turns:
+  # The bot greets first on connect — observe it without barging in.
+  - expect:
+      - event: response
+        eval: "the bot says hello and asks what the user's favorite color is"
+
+  # Transitions to the end node, which thanks the user and fires the
+  # end_conversation post-action. We assert only the function call here: the
+  # farewell audio plays as the pipeline tears down and isn't reliably captured.
+  - user: "My favorite color is blue."
+    expect:
+      - event: function_call
+        calls:
+          - name: record_favorite_color_func
+            args: { color: blue }

@@ -1,0 +1,38 @@
+# Pipecat Flows release eval suite.
+#
+# Spawns each example bot with its eval transport (`-t eval`) and runs the
+# scenarios listed against it. Run the whole suite with:
+#
+#   uv run pipecat eval suite evals/manifest.yaml -a
+#
+# Paths (bots_dir, scenarios_dir, runs_dir) resolve relative to this file.
+# See evals/README.md for prerequisites (Ollama judge, API keys, model downloads).
+
+concurrency: 4            # local Kokoro/Moonshine + bot processes — keep modest; tune to your machine
+runs_dir: eval-runs       # logs + recordings land in evals/eval-runs/<timestamp>/
+bots_dir: ../examples     # bot paths below resolve relative to examples/
+scenarios_dir: scenarios  # scenario names below resolve to scenarios/<name>.yaml
+spawn: "{python} {bot} -t eval --port {port}"
+
+suite:
+  - bot: quickstart/hello_world.py
+    scenarios: [hello_world]
+
+  - bot: food_ordering.py
+    scenarios: [food_ordering_pizza, food_ordering_sushi]
+
+  - bot: food_ordering_direct_functions.py
+    scenarios: [food_ordering_direct]
+
+  - bot: patient_intake.py
+    scenarios: [patient_intake]
+
+  - bot: restaurant_reservation.py
+    scenarios: [restaurant_reservation_available, restaurant_reservation_no_availability]
+
+  - bot: insurance_quote.py
+    scenarios: [insurance_quote]
+
+  # Needs OPENAI_API_KEY + GOOGLE_API_KEY + ANTHROPIC_API_KEY (see README).
+  - bot: llm_switching.py
+    scenarios: [llm_switching]
