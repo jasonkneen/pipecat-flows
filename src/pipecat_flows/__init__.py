@@ -35,6 +35,7 @@ from .types import (
     NodeConfig,
     ZeroArgFunctionHandler,
     flows_direct_function,
+    flows_tool_options,
 )
 
 __all__ = [
@@ -53,6 +54,7 @@ __all__ = [
     "FlowsDirectFunction",
     "NodeConfig",
     "ZeroArgFunctionHandler",
+    "flows_tool_options",
     "flows_direct_function",
     # Exceptions
     "FlowError",

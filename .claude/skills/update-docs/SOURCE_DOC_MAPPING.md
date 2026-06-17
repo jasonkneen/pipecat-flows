@@ -7,7 +7,7 @@ Maps pipecat-flows source files to their documentation pages in the
 
 | Source file | Doc page(s) | Notes |
 |---|---|---|
-| `types.py` | `api-reference/pipecat-flows/types.mdx` | NodeConfig, FlowsFunctionSchema, ActionConfig, ContextStrategy, ContextStrategyConfig, type aliases, flows_direct_function decorator |
+| `types.py` | `api-reference/pipecat-flows/types.mdx` | NodeConfig, FlowsFunctionSchema, ActionConfig, ContextStrategy, ContextStrategyConfig, type aliases, flows_tool_options decorator (and deprecated flows_direct_function alias) |
 | `manager.py` | `api-reference/pipecat-flows/flow-manager.mdx` | FlowManager constructor, properties, methods |
 | `actions.py` | `api-reference/pipecat-flows/flow-manager.mdx` (register_action), `api-reference/pipecat-flows/types.mdx` (ActionConfig) | Built-in action types and custom action registration |
 | `adapters.py` | `api-reference/pipecat-flows/overview.mdx` | LLM Provider Support table |
@@ -20,7 +20,7 @@ Changes to source files may also affect the guide pages under `pipecat-flows/gui
 | Source file | Guide page(s) | What to check |
 |---|---|---|
 | `types.py` | `pipecat-flows/guides/nodes-and-messages.mdx` | NodeConfig properties, message format, respond_immediately |
-| `types.py` | `pipecat-flows/guides/functions.mdx` | FlowsFunctionSchema examples, direct functions, flows_direct_function decorator |
+| `types.py` | `pipecat-flows/guides/functions.mdx` | FlowsFunctionSchema examples, direct functions, flows_tool_options decorator (and deprecated flows_direct_function alias) |
 | `types.py` | `pipecat-flows/guides/context-strategies.mdx` | ContextStrategy enum values, ContextStrategyConfig usage |
 | `manager.py` | `pipecat-flows/guides/state-management.mdx` | FlowManager initialization, state dict, global_functions |
 | `actions.py` | `pipecat-flows/guides/actions.mdx` | Built-in actions, custom actions, action timing |

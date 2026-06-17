@@ -13,7 +13,7 @@ License: BSD 2-Clause
 Source code lives in `src/pipecat_flows/`:
 
 - **`manager.py`** - Core `FlowManager` class. Orchestrates conversation flows, manages state transitions, registers/executes functions, handles actions.
-- **`types.py`** - Type definitions: `NodeConfig`, `FlowsFunctionSchema`, `FlowResult`, `FlowArgs`, `ContextStrategy`, handler protocols, the `@flows_direct_function()` decorator.
+- **`types.py`** - Type definitions: `NodeConfig`, `FlowsFunctionSchema`, `FlowResult`, `FlowArgs`, `ContextStrategy`, handler protocols, the `@flows_tool_options()` decorator (and its deprecated `@flows_direct_function` alias).
 - **`actions.py`** - `ActionManager` for pre/post-transition actions. Built-in actions: `tts_say`, `end_conversation`, `function`. Supports custom action registration.
 - **`adapters.py`** - `LLMAdapter` bridges FlowManager and Pipecat's `LLMContext`. Handles function formatting and cross-provider compatibility.
 - **`exceptions.py`** - Exception hierarchy: `FlowError` (base), `FlowInitializationError`, `FlowTransitionError`, `InvalidFunctionError`, `ActionError`.
