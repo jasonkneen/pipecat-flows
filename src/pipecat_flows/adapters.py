@@ -4,77 +4,22 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
-"""LLM adapter for normalizing function and message formats.
+"""LLM adapter for conversation-summary generation and formatting.
 
-This module provides the LLMAdapter class that normalizes interactions between
-the flow manager and Pipecat's universal LLMContext. It handles:
+This module provides the LLMAdapter class used by the flow manager to:
 
-- Function name extraction from FlowsFunctionSchema
-- Function formatting into ToolsSchema for LLMSetToolsFrame
-- Summary message formatting
-- Summary generation via out-of-band LLM inference
+- Format a generated summary as a context message
+- Generate a summary via out-of-band LLM inference
 """
 
 from typing import Any
 
 from loguru import logger
-from pipecat.adapters.schemas.function_schema import FunctionSchema
-from pipecat.adapters.schemas.tools_schema import ToolsSchema
-from pipecat.processors.aggregators.llm_context import (
-    NOT_GIVEN,
-    LLMContext,
-    LLMContextMessage,
-    NotGiven,
-)
-
-from pipecat_flows.types import FlowsFunctionSchema
+from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
 
 
 class LLMAdapter:
-    """Adapter for normalizing function and message formats.
-
-    Normalizes interactions between the flow manager and Pipecat's universal
-    LLMContext. Functions must be provided as FlowsFunctionSchema or
-    FunctionSchema objects.
-    """
-
-    def format_functions(
-        self,
-        functions: list[FunctionSchema | FlowsFunctionSchema],
-    ) -> ToolsSchema | NotGiven:
-        """Format functions into a ToolsSchema for use in LLMSetToolsFrame.
-
-        Args:
-            functions: List of function definitions (schema objects).
-
-        Returns:
-            ToolsSchema containing the functions, or NOT_GIVEN if no functions.
-        """
-        if not functions:
-            return NOT_GIVEN
-
-        # Convert to standard FunctionSchema objects for the ToolsSchema
-        standard_functions = []
-
-        for func in functions:
-            if isinstance(func, FlowsFunctionSchema):
-                # Extract just the FunctionSchema part for the LLM
-                standard_functions.append(
-                    FunctionSchema(
-                        name=func.name,
-                        description=func.description,
-                        properties=func.properties,
-                        required=func.required,
-                    )
-                )
-            elif isinstance(func, FunctionSchema):
-                # Already a standard FunctionSchema
-                standard_functions.append(func)
-
-        if not standard_functions:
-            return NOT_GIVEN
-
-        return ToolsSchema(standard_tools=standard_functions)
+    """Helpers for generating and formatting conversation summaries."""
 
     def format_summary_message(self, summary: str) -> dict:
         """Format a summary as a developer message.

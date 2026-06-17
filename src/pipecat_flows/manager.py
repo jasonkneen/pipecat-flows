@@ -31,6 +31,8 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from loguru import logger
+from pipecat.adapters.schemas.direct_function import tool_options
+from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.frames.frames import (
     FunctionCallResultProperties,
@@ -42,7 +44,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.pipeline.llm_switcher import LLMSwitcher
 from pipecat.pipeline.worker import PipelineWorker
-from pipecat.processors.aggregators.llm_context import LLMContext, NotGiven
+from pipecat.processors.aggregators.llm_context import NOT_GIVEN, LLMContext, NotGiven
 from pipecat.services.llm_service import FunctionCallParams, LLMService
 from pipecat.services.settings import LLMSettings
 from pipecat.transports.base_transport import BaseTransport
@@ -445,13 +447,14 @@ class FlowManager:
     async def _create_transition_func(
         self,
         name: str,
-        handler: Callable | FlowsDirectFunctionWrapper | None,
+        handler: Callable | FlowsDirectFunctionWrapper,
     ) -> Callable:
         """Create a transition function for the given name and handler.
 
         Args:
             name: Name of the function being registered.
-            handler: Optional function to process data.
+            handler: Function to process the call: a Flows function handler or a
+                direct-function wrapper.
 
         Returns:
             Async function that handles the tool invocation.
@@ -462,38 +465,33 @@ class FlowManager:
             try:
                 logger.debug(f"Function called: {name}")
 
-                # Execute handler if present
                 is_transition_only_function = False
                 acknowledged_result = {"status": "acknowledged"}
-                if handler:
-                    # Invoke the handler with the provided arguments
-                    if isinstance(handler, FlowsDirectFunctionWrapper):
-                        handler_response = await handler.invoke(params.arguments, self)
-                    else:
-                        # Convert Pipecat's Mapping to a fresh dict so handlers may
-                        # mutate without touching Pipecat's internal state. (In 2.0.0
-                        # FlowArgs is planned to widen to Mapping; this conversion
-                        # can go away then.)
-                        handler_response = await self._call_handler(handler, dict(params.arguments))
-                    # Support both "consolidated" handlers that return (result, next_node) and handlers
-                    # that return just the result.
-                    if isinstance(handler_response, tuple):
-                        result, next_node = handler_response
-                        if result is None:
-                            result = acknowledged_result
-                            is_transition_only_function = True
-                    else:
-                        result = handler_response
-                        next_node = None
-                        # FlowsDirectFunctions should always be "consolidated" functions that return a tuple
-                        if isinstance(handler, FlowsDirectFunctionWrapper):
-                            raise InvalidFunctionError(
-                                f"Direct function {name} expected to return a tuple (result, next_node) but got {type(result)}"
-                            )
+
+                # Invoke the handler with the provided arguments
+                if isinstance(handler, FlowsDirectFunctionWrapper):
+                    handler_response = await handler.invoke(params.arguments, self)
                 else:
-                    result = acknowledged_result
+                    # Convert Pipecat's Mapping to a fresh dict so handlers may
+                    # mutate without touching Pipecat's internal state. (In 2.0.0
+                    # FlowArgs is planned to widen to Mapping; this conversion
+                    # can go away then.)
+                    handler_response = await self._call_handler(handler, dict(params.arguments))
+                # Support both "consolidated" handlers that return (result, next_node) and handlers
+                # that return just the result.
+                if isinstance(handler_response, tuple):
+                    result, next_node = handler_response
+                    if result is None:
+                        result = acknowledged_result
+                        is_transition_only_function = True
+                else:
+                    result = handler_response
                     next_node = None
-                    is_transition_only_function = True
+                    # FlowsDirectFunctions should always be "consolidated" functions that return a tuple
+                    if isinstance(handler, FlowsDirectFunctionWrapper):
+                        raise InvalidFunctionError(
+                            f"Direct function {name} expected to return a tuple (result, next_node) but got {type(result)}"
+                        )
 
                 logger.debug(
                     f"{'Transition-only function called for' if is_transition_only_function else 'Function handler completed for'} {name}"
@@ -559,53 +557,41 @@ class FlowManager:
             logger.error(f"Error executing transition: {str(e)}")
             raise
 
-    async def _register_function(
-        self,
-        name: str,
-        new_functions: set[str],
-        handler: Callable | FlowsDirectFunctionWrapper | None,
-        *,
-        cancel_on_interruption: bool = True,
-        timeout_secs: float | None = None,
-    ) -> None:
-        """Register a function with the LLM.
+    async def _create_function_schema(
+        self, tool: FlowsFunctionSchema | FlowsDirectFunctionWrapper
+    ) -> FunctionSchema:
+        """Build a FunctionSchema that carries the handler the LLM service will run.
 
-        Always re-registers so a node redeclaring a function with a different
-        handler replaces the previous binding. ``LLMService.register_function``
-        is a dict upsert by name, so re-registration is idempotent.
+        Flows wraps each tool's handler in a "transition function" that runs the
+        tool's work and coordinates any node transition.
 
         Args:
-            name: Name of the function to register
-            handler: A callable function handler or a FlowsDirectFunction.
-            new_functions: Set to track newly registered functions for this node
-            cancel_on_interruption: Whether to cancel this function call when an
-                interruption occurs. Defaults to True.
-            timeout_secs: Optional per-tool timeout in seconds, overriding the global
-                ``function_call_timeout_secs``. Defaults to None (use global timeout).
+            tool: The node's function, as a ``FlowsFunctionSchema`` or a wrapped
+                direct function.
 
-        Raises:
-            FlowError: If function registration fails
+        Returns:
+            A ``FunctionSchema`` describing the tool and carrying its handler.
         """
-        try:
-            # Create transition function
-            transition_func = await self._create_transition_func(name, handler)
-
-            # Register function with LLM (or LLMSwitcher)
-            kwargs = {}
-            if timeout_secs is not None:
-                kwargs["timeout_secs"] = timeout_secs
-            self._llm.register_function(
-                name,
-                transition_func,
-                cancel_on_interruption=cancel_on_interruption,
-                **kwargs,
-            )
-
-            new_functions.add(name)
-            logger.debug(f"Registered function: {name}")
-        except Exception as e:
-            logger.error(f"Failed to register function {name}: {str(e)}")
-            raise FlowError(f"Function registration failed: {str(e)}") from e
+        # For a direct function the wrapper itself is the handler; a
+        # FlowsFunctionSchema carries its handler separately.
+        handler = tool if isinstance(tool, FlowsDirectFunctionWrapper) else tool.handler
+        # Stamp the resolved call options onto the handler so the LLM service
+        # applies them when it registers the advertised tool. This is base
+        # Pipecat's ``tool_options`` (not ``flows_tool_options``): the handler
+        # rides on a base ``FunctionSchema``, and ``tool`` already carries Flows'
+        # resolved option values.
+        transition_func = tool_options(
+            cancel_on_interruption=tool.cancel_on_interruption,
+            timeout_secs=tool.timeout_secs,
+        )(await self._create_transition_func(tool.name, handler))
+        base = tool.to_function_schema()
+        return FunctionSchema(
+            name=base.name,
+            description=base.description,
+            properties=base.properties,
+            required=base.required,
+            handler=transition_func,
+        )
 
     async def set_node_from_config(self, node_config: NodeConfig) -> None:
         """Set up a new conversation node and transition to it.
@@ -669,57 +655,29 @@ class FlowManager:
             if pre_actions := node_config.get("pre_actions"):
                 await self._execute_actions(pre_actions=pre_actions)
 
-            # Register functions and prepare tools
-            tools: list[FlowsFunctionSchema | FlowsDirectFunctionWrapper] = []
+            # Build the node's function schemas (carrying handlers)
             new_functions: set[str] = set()
 
-            # Get functions list with default empty list if not provided
-            functions_list = node_config.get("functions", [])
-
             # Mix in global functions that should be available at every node
-            functions_list = self._global_functions + functions_list
+            functions_list = self._global_functions + node_config.get("functions", [])
 
-            async def register_function_schema(schema: FlowsFunctionSchema):
-                """Helper to register a single FlowsFunctionSchema."""
-                tools.append(schema)
-                await self._register_function(
-                    name=schema.name,
-                    new_functions=new_functions,
-                    handler=schema.handler,
-                    cancel_on_interruption=schema.cancel_on_interruption,
-                    timeout_secs=schema.timeout_secs,
-                )
-
-            async def register_direct_function(func):
-                """Helper to register a single direct function."""
-                direct_function = FlowsDirectFunctionWrapper(function=func)
-                tools.append(direct_function)
-                await self._register_function(
-                    name=direct_function.name,
-                    new_functions=new_functions,
-                    handler=direct_function,
-                    cancel_on_interruption=direct_function.cancel_on_interruption,
-                    timeout_secs=direct_function.timeout_secs,
-                )
-
+            standard_functions: list[FunctionSchema] = []
             for func_config in functions_list:
                 if callable(func_config):
-                    await register_direct_function(func_config)
+                    tool = FlowsDirectFunctionWrapper(function=func_config)
                 elif isinstance(func_config, FlowsFunctionSchema):
-                    await register_function_schema(func_config)
+                    tool = func_config
                 else:
                     raise InvalidFunctionError(
                         f"Invalid function format in node '{node_id}'. "
                         "Use FlowsFunctionSchema or direct functions."
                     )
+                standard_functions.append(await self._create_function_schema(tool))
+                new_functions.add(tool.name)
 
-            # Create ToolsSchema with standard function schemas
-            standard_functions = []
-            for tool in tools:
-                # Convert FlowsFunctionSchema to standard FunctionSchema for the LLM
-                standard_functions.append(tool.to_function_schema())
-
-            formatted_tools = self._adapter.format_functions(standard_functions)
+            formatted_tools = (
+                ToolsSchema(standard_tools=standard_functions) if standard_functions else NOT_GIVEN
+            )
 
             role_message = node_config.get("role_message")
             role_messages = node_config.get("role_messages")
@@ -918,11 +876,9 @@ class FlowManager:
         """Validate the configuration of a conversation node.
 
         This method ensures that:
-        1. Required fields (task_messages) are present
-        2. Functions have valid configurations based on their type:
-        - FlowsFunctionSchema objects have proper handler/transition fields
-        - Direct functions are valid according to the FlowsDirectFunctions validation
-        3. Edge functions (matching node names) are allowed without handlers/transitions
+        1. Required fields (task_messages) are present.
+        2. Each function is either a ``FlowsFunctionSchema`` or a valid direct
+           function.
 
         Args:
             node_id: Identifier for the node being validated.
@@ -943,10 +899,7 @@ class FlowManager:
         for func in functions_list:
             if callable(func):
                 FlowsDirectFunctionWrapper.validate_function(func)
-            elif isinstance(func, FlowsFunctionSchema):
-                if not func.handler:
-                    logger.warning(f"Function '{func.name}' in node '{node_id}' has no handler")
-            else:
+            elif not isinstance(func, FlowsFunctionSchema):
                 raise InvalidFunctionError(
                     f"Invalid function format in node '{node_id}'. "
                     "Use FlowsFunctionSchema or direct functions."

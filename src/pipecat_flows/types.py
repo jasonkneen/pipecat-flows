@@ -333,8 +333,8 @@ Runtime validation of the expected shape happens in
 class FlowsFunctionSchema:
     """Function schema with Flows-specific properties.
 
-    This class extends standard function schemas with additional fields for
-    Pipecat Flows integration including handler assignment and transition logic.
+    This class extends a standard function schema with the Flows-specific
+    ``handler`` that runs when the function is called, plus its call options.
 
     Parameters:
         name: Name of the function.
@@ -352,7 +352,7 @@ class FlowsFunctionSchema:
     description: str
     properties: dict[str, Any]
     required: list[str]
-    handler: FunctionHandler | None = None
+    handler: FunctionHandler
     cancel_on_interruption: bool = False
     timeout_secs: float | None = None
 

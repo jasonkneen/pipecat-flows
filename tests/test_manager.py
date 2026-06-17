@@ -33,8 +33,13 @@ from pipecat.services.settings import LLMSettings
 
 from pipecat_flows.exceptions import FlowError, FlowTransitionError
 from pipecat_flows.manager import FlowManager, NodeConfig
-from pipecat_flows.types import FlowArgs, FlowResult, FlowsFunctionSchema
-from tests.test_helpers import assert_tts_speak_frames_queued, make_mock_task
+from pipecat_flows.types import FlowArgs, FlowResult, FlowsFunctionSchema, flows_tool_options
+from tests.test_helpers import (
+    assert_tts_speak_frames_queued,
+    get_advertised_tool_handlers,
+    get_advertised_tools,
+    make_mock_task,
+)
 
 
 class TestFlowManager(unittest.IsolatedAsyncioTestCase):
@@ -53,7 +58,6 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
         """Set up test fixtures before each test."""
         self.mock_task = make_mock_task()
         self.mock_llm = OpenAILLMService(api_key="")
-        self.mock_llm.register_function = MagicMock()
 
         # Create mock assistant aggregator with public property only
         self.mock_assistant_aggregator = MagicMock()
@@ -183,7 +187,7 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(flow_manager._current_functions, set())
 
     async def test_function_registration(self):
-        """Test function registration with LLM."""
+        """Test that a node's functions are advertised with a handler for auto-registration."""
         flow_manager = FlowManager(
             worker=self.mock_task,
             llm=self.mock_llm,
@@ -192,16 +196,16 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
         await flow_manager.initialize()
 
         # Reset mock to clear initialization calls
-        self.mock_llm.register_function.reset_mock()
+        self.mock_task.queue_frames.reset_mock()
 
         # Set node with function
         await flow_manager.set_node_from_config(self.sample_node)
 
-        # Verify function was registered
-        self.mock_llm.register_function.assert_called_once()
-        name, func = self.mock_llm.register_function.call_args[0]
-        self.assertEqual(name, "test_function")
-        self.assertTrue(callable(func))
+        # The tool is advertised carrying its handler, which the LLM service
+        # registers when it sees the advertised tools.
+        handlers = get_advertised_tool_handlers(self.mock_task)
+        self.assertEqual(set(handlers), {"test_function"})
+        self.assertTrue(callable(handlers["test_function"]))
 
     async def test_action_execution(self):
         """Test execution of pre and post actions."""
@@ -305,15 +309,86 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
 
         await flow_manager.set_node_from_config(node_config)
 
-        # Verify all functions were registered
-        self.assertEqual(self.mock_llm.register_function.call_count, 3)
+        # Verify all functions were advertised (each carrying a handler) and tracked
+        handlers = get_advertised_tool_handlers(self.mock_task)
+        self.assertEqual(set(handlers), {"func_0", "func_1", "func_2"})
         self.assertEqual(len(flow_manager._current_functions), 3)
+
+    async def test_advertised_handlers_register_with_node_call_options(self):
+        """Advertised handlers register with each tool's resolved call options.
+
+        The wrapped handler carries the tool's call options (via @tool_options),
+        so the LLM service resolves cancel_on_interruption to Flows' default of
+        False — not the service's own default of True — and honors explicit
+        overrides on both FlowsFunctionSchemas and direct functions.
+        """
+        flow_manager = FlowManager(
+            worker=self.mock_task,
+            llm=self.mock_llm,
+            context_aggregator=self.mock_context_aggregator,
+        )
+        await flow_manager.initialize()
+
+        async def handler(args, flow_manager):
+            return {"ok": True}, None
+
+        @flows_tool_options(cancel_on_interruption=True, timeout_secs=7)
+        async def direct_tool(flow_manager, city: str):
+            """Do a thing.
+
+            Args:
+                city: A city.
+            """
+            return {"ok": True}, None
+
+        await flow_manager.set_node_from_config(
+            {
+                "task_messages": [{"role": "developer", "content": "Test"}],
+                "functions": [
+                    FlowsFunctionSchema(
+                        name="defaults",
+                        description="Uses default call options",
+                        properties={},
+                        required=[],
+                        handler=handler,
+                    ),
+                    FlowsFunctionSchema(
+                        name="overrides",
+                        description="Overrides call options",
+                        properties={},
+                        required=[],
+                        handler=handler,
+                        cancel_on_interruption=True,
+                        timeout_secs=12.5,
+                    ),
+                    direct_tool,
+                ],
+            }
+        )
+
+        # Register the advertised tools the way the LLM service does on inference.
+        self.mock_llm._sync_registered_tool_handlers(get_advertised_tools(self.mock_task))
+
+        # FlowsFunctionSchema default: Flows' False default survives (not the service's True).
+        defaults = self.mock_llm._functions["defaults"]
+        self.assertFalse(defaults.cancel_on_interruption)
+        self.assertIsNone(defaults.timeout_secs)
+
+        # FlowsFunctionSchema explicit overrides are honored.
+        overrides = self.mock_llm._functions["overrides"]
+        self.assertTrue(overrides.cancel_on_interruption)
+        self.assertEqual(overrides.timeout_secs, 12.5)
+
+        # A direct function's @flows_tool_options values are honored.
+        direct = self.mock_llm._functions["direct_tool"]
+        self.assertTrue(direct.cancel_on_interruption)
+        self.assertEqual(direct.timeout_secs, 7)
 
     async def test_redeclared_function_rebinds_new_handler(self):
         """Regression: redeclaring a function in a new node must bind the new handler.
 
         Two adjacent nodes declare ``go`` with different handlers returning
-        different next nodes. The LLM-registered handler for ``go`` must reflect
+        different next nodes. The handler advertised for ``go`` must reflect
         the latest node's handler, not the first one's.
 
         See https://github.com/pipecat-ai/pipecat-flows/issues/269.
@@ -371,21 +446,8 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        # ``go`` must be registered for both nodes, not just the first one.
-        go_registrations = [
-            call_args
-            for call_args in self.mock_llm.register_function.call_args_list
-            if call_args[0][0] == "go"
-        ]
-        self.assertEqual(
-            len(go_registrations),
-            2,
-            "Expected 'go' to be re-registered when node B redeclared it; "
-            f"got {len(go_registrations)} registration(s).",
-        )
-
-        # Drive the most recent transition_func and confirm handler_b runs.
-        latest_go = go_registrations[-1][0][1]
+        # After node B, the advertised ``go`` handler must be node B's, not node A's.
+        latest_go = get_advertised_tool_handlers(self.mock_task)["go"]
 
         async def result_callback(result, *, properties=None):
             pass
@@ -595,50 +657,14 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
             await flow_manager.set_node_from_config(invalid_config)
         self.assertIn("Invalid function format", str(context.exception))
 
-        # Test function without handler
-        invalid_config = {
-            "name": "test",
-            "task_messages": [{"role": "developer", "content": "Test"}],
-            "functions": [
-                FlowsFunctionSchema(
-                    name="test_func",
-                    description="Test",
-                    properties={},
-                    required=[],
-                ),
-            ],
-        }
-
-        # Mock loguru.logger.warning to capture the warning
-        warning_message = None
-
-        def capture_warning(msg, *args, **kwargs):
-            nonlocal warning_message
-            warning_message = msg
-
-        with patch("loguru.logger.warning", side_effect=capture_warning):
-            await flow_manager.set_node_from_config(invalid_config)
-            self.assertIsNotNone(warning_message)
-            self.assertIn(
-                "Function 'test_func' in node 'test' has no handler",
-                warning_message,
+        # A FlowsFunctionSchema requires a handler: omitting it is a construction-time error.
+        with self.assertRaises(TypeError):
+            FlowsFunctionSchema(
+                name="test_func",
+                description="Test",
+                properties={},
+                required=[],
             )
-
-    async def test_register_function_error_handling(self):
-        """Test error handling in function registration."""
-        flow_manager = FlowManager(
-            worker=self.mock_task,
-            llm=self.mock_llm,
-            context_aggregator=self.mock_context_aggregator,
-        )
-        await flow_manager.initialize()
-
-        # Mock LLM to raise error on register_function
-        flow_manager._llm.register_function.side_effect = Exception("Registration error")
-
-        new_functions = set()
-        with self.assertRaises(FlowError):
-            await flow_manager._register_function("test", new_functions, None)
 
     async def test_action_execution_error_handling(self):
         """Test error handling in action execution."""
@@ -892,19 +918,11 @@ class TestFlowManager(unittest.IsolatedAsyncioTestCase):
 
         await flow_manager.set_node_from_config(node_config)
 
-        # Get the registered functions
-        node_func = None
-        edge_func_1 = None
-        edge_func_2 = None
-        for args in self.mock_llm.register_function.call_args_list:
-            name = args[0][0]
-            func = args[0][1]
-            if name == "node_function":
-                node_func = func
-            elif name == "edge_function_1":
-                edge_func_1 = func
-            elif name == "edge_function_2":
-                edge_func_2 = func
+        # Get the advertised handlers (which the LLM service auto-registers)
+        handlers = get_advertised_tool_handlers(self.mock_task)
+        node_func = handlers["node_function"]
+        edge_func_1 = handlers["edge_function_1"]
+        edge_func_2 = handlers["edge_function_2"]
 
         # Test node function
         self.mock_task.queue_frames.reset_mock()
