@@ -35,12 +35,7 @@ from pipecat.transports.daily.transport import DailyParams
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
 
-from pipecat_flows import (
-    FlowArgs,
-    FlowManager,
-    FlowsFunctionSchema,
-    NodeConfig,
-)
+from pipecat_flows import FlowManager, NodeConfig
 
 load_dotenv(override=True)
 
@@ -64,18 +59,9 @@ transport_params = {
 def create_initial_node() -> NodeConfig:
     """Create the initial node of the flow.
 
-    Define the bot's role and task for the node as well as the function for it to call.
-    The function call includes a handler which provides the function call result to
-    Pipecat and then transitions to the next node.
+    Define the bot's role and task for the node, plus the function it can call.
+    The function records the result and transitions to the next node.
     """
-    record_favorite_color_func = FlowsFunctionSchema(
-        name="record_favorite_color_func",
-        description="Record the color the user said is their favorite.",
-        required=["color"],
-        handler=record_favorite_color_and_set_next_node,
-        properties={"color": {"type": "string"}},
-    )
-
     return NodeConfig(
         name="initial",
         role_message="You are an inquisitive child. Use very simple language. Ask simple questions. You must ALWAYS use one of the available functions to progress the conversation. Your responses will be converted to audio. Avoid outputting special characters and emojis.",
@@ -85,20 +71,21 @@ def create_initial_node() -> NodeConfig:
                 "content": "Say 'Hello world' and ask what is the user's favorite color.",
             }
         ],
-        functions=[record_favorite_color_func],
+        functions=[record_favorite_color],
     )
 
 
-async def record_favorite_color_and_set_next_node(
-    args: FlowArgs, flow_manager: FlowManager
-) -> tuple[str, NodeConfig]:
-    """Function handler that records the color then sets the next node.
+async def record_favorite_color(flow_manager: FlowManager, color: str) -> tuple[str, NodeConfig]:
+    """Record the color the user said is their favorite.
 
-    Here "record" means print to the console, but any logic could go here;
-    Write to a database, make an API call, etc.
+    Here "record" means print to the console, but any logic could go here:
+    write to a database, make an API call, etc.
+
+    Args:
+        color: The user's favorite color.
     """
-    print(f"Your favorite color is: {args['color']}")
-    return args["color"], create_end_node()
+    print(f"Your favorite color is: {color}")
+    return color, create_end_node()
 
 
 def create_end_node() -> NodeConfig:
