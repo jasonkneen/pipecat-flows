@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [1.3.0] - 2026-06-18
+
+### Added
+
+- Added `multi_worker_handoff.py` example showing how to compose Pipecat Flows
+  with Pipecat's multi-worker framework. A structured Flows reservation worker
+  (built as a plain `PipelineWorker` with a `FlowManager` wired onto it) hands
+  off to and from a free-form `LLMWorker` router over the bus, sharing a single
+  conversation context.
+  (PR [#280](https://github.com/pipecat-ai/pipecat-flows/pull/280))
+
+- Added an `append_text_to_context` option to the `tts_say` and
+  `end_conversation` actions, controlling whether the spoken text is written to
+  the LLM context.
+  (PR [#281](https://github.com/pipecat-ai/pipecat-flows/pull/281))
+
+- Added the `@flows_tool_options(cancel_on_interruption=..., timeout_secs=...)`
+  decorator for configuring a Flows direct function's call options. It is the
+  Flows-flavored counterpart to Pipecat's `@tool_options` (and is built on it),
+  replacing `@flows_direct_function` with a name that makes clearer that it
+  configures call options.
+  (PR [#282](https://github.com/pipecat-ai/pipecat-flows/pull/282))
+
+### Changed
+
+- ⚠️ The initial flow node now follows its context strategy (default `APPEND`)
+  instead of always replacing the context. With the default strategy, context
+  written before the node's first inference — for example by a `tts_say`
+  pre-action — is now preserved rather than discarded. Set
+  `context_strategy=RESET` on the initial node for the previous clean-slate
+  behavior.
+  (PR [#281](https://github.com/pipecat-ai/pipecat-flows/pull/281))
+
+- ⚠️ The `tts_say` and `end_conversation` actions now append their spoken text
+  to the LLM context by default (`append_text_to_context` defaults to `True`).
+  Set `append_text_to_context=False` to opt out.
+  (PR [#281](https://github.com/pipecat-ai/pipecat-flows/pull/281))
+
+- ⚠️ `FlowsFunctionSchema.handler` is no longer typed as optional. In practice,
+  it wasn't optional anyway: the optionality was a holdover from the removed
+  `transition_to`/`transition_callback` fields, which once let a function
+  transition without a handler. Transitions now happen via a handler that
+  returns `(result, next_node)`. Constructing a `FlowsFunctionSchema` without a
+  `handler` now raises an error.
+  (PR [#283](https://github.com/pipecat-ai/pipecat-flows/pull/283))
+
+- Flows now relies on Pipecat's tool-handler auto-registration, rather than
+  explicitly invoking `LLMService.register_function`.
+  (PR [#283](https://github.com/pipecat-ai/pipecat-flows/pull/283))
+
+### Deprecated
+
+- Deprecated the `@flows_direct_function` decorator. It is now an alias of
+  `@flows_tool_options` that emits a `DeprecationWarning`; switch to
+  `@flows_tool_options`. The alias will be removed in a future version.
+  (PR [#282](https://github.com/pipecat-ai/pipecat-flows/pull/282))
+
 ## [1.2.0] - 2026-05-29
 
 ### Changed
