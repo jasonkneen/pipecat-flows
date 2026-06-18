@@ -13,6 +13,9 @@ turns:
       - event: function_call
         calls:
           - name: choose_sushi
+      # Wait for the sushi node to settle before sending the next turn — text
+      # turns send instantly, with none of the audio pacing that masked this.
+      - event: response
 
   # Transitions to the confirmation node, which reads the order back.
   - user: "Three California rolls, please."

@@ -212,8 +212,13 @@ def create_pizza_node() -> NodeConfig:
         task_messages=[
             {
                 "role": "developer",
-                "content": """You are handling a pizza order. Use the available functions:
-- Use select_pizza_order when the user specifies both size AND type
+                "content": """You are handling a pizza order.
+
+As soon as the user has given both a size AND a type, immediately call
+select_pizza_order to record it. Do not acknowledge the order conversationally,
+ask whether they want anything else, or wait for further confirmation first — the
+confirmation step handles all of that. If the size or the type is still missing,
+ask only for the missing detail.
 
 Pricing:
 - Small: $10
@@ -277,8 +282,13 @@ def create_sushi_node() -> NodeConfig:
         task_messages=[
             {
                 "role": "developer",
-                "content": """You are handling a sushi order. Use the available functions:
-- Use select_sushi_order when the user specifies both count AND type
+                "content": """You are handling a sushi order.
+
+As soon as the user has given both a roll count AND a roll type, immediately call
+select_sushi_order to record it. Do not acknowledge the order conversationally,
+ask whether they want anything else, or wait for further confirmation first — the
+confirmation step handles all of that. If the count or the type is still missing,
+ask only for the missing detail.
 
 Pricing:
 - $8 per roll
