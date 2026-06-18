@@ -1,6 +1,3 @@
-# Food ordering, sushi branch. Confirms the other runtime path out of the
-# initial node (choose_sushi) and a node function with an integer arg
-# (select_sushi_order count).
 name: food_ordering_sushi
 
 turns:
@@ -13,11 +10,9 @@ turns:
       - event: function_call
         calls:
           - name: choose_sushi
-      # Wait for the sushi node to settle before sending the next turn — text
-      # turns send instantly, with none of the audio pacing that masked this.
       - event: response
+        eval: "the bot asks for sushi details such as roll type and count"
 
-  # Transitions to the confirmation node, which reads the order back.
   - user: "Three California rolls, please."
     expect:
       - event: function_call
@@ -27,8 +22,8 @@ turns:
       - event: response
         eval: "the bot reads back or confirms an order of three California rolls"
 
-  # complete_order transitions to the end node (end_conversation post-action),
-  # so we assert only the function call.
+  # Terminal turn — assert the function call only: end_conversation tears the
+  # pipeline down before the farewell llm_response reaches the harness.
   - user: "Yes, that's correct, go ahead."
     expect:
       - event: function_call

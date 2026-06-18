@@ -1,7 +1,3 @@
-# Food ordering, pizza branch. Exercises dynamic routing (choose_pizza edge
-# function), a node function with enum args (select_pizza_order), a global
-# function available at every node (get_delivery_estimate), and the
-# FlowsFunctionSchema registration path.
 name: food_ordering_pizza
 
 turns:
@@ -14,13 +10,9 @@ turns:
       - event: function_call
         calls:
           - name: choose_pizza
-      # Assert the post-transition prompt so the harness waits for the pizza node
-      # to settle before the next turn (text turns send instantly, with none of
-      # the audio pacing that masked this).
       - event: response
         eval: "the bot asks for pizza details such as size and type"
 
-  # Transitions to the confirmation node, which reads the order back.
   - user: "A large pepperoni please."
     expect:
       - event: function_call
@@ -30,7 +22,6 @@ turns:
       - event: response
         eval: "the bot reads back or confirms a large pepperoni pizza order"
 
-  # Global function, available even mid-order.
   - user: "How long will delivery take?"
     expect:
       - event: function_call
@@ -39,8 +30,8 @@ turns:
       - event: response
         eval: "the bot gives a delivery time estimate"
 
-  # complete_order transitions to the end node (end_conversation post-action),
-  # so we assert only the function call (see the note in hello_world.yaml).
+  # Terminal turn — assert the function call only: end_conversation tears the
+  # pipeline down before the farewell llm_response reaches the harness.
   - user: "That's everything, please confirm my order."
     expect:
       - event: function_call

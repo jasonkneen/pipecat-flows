@@ -1,7 +1,3 @@
-# Restaurant reservation, conditional-branch path. 7:00 PM is fully booked in
-# the mock system, so check_availability routes to the dynamically-created
-# no_availability node (built with the alternative times). The customer then
-# picks an open slot, which routes to confirmation.
 name: restaurant_reservation_no_availability
 
 turns:
@@ -15,6 +11,8 @@ turns:
         calls:
           - name: collect_party_size
             args: { size: 2 }
+      - event: response
+        eval: "the bot asks what time they would like to dine"
 
   - user: "We'd like to come at seven PM."
     expect:
@@ -32,6 +30,8 @@ turns:
       - event: response
         eval: "the bot confirms a reservation is available at the new time"
 
+  # Terminal turn — assert the function call only: end_conversation tears the
+  # pipeline down before the farewell llm_response reaches the harness.
   - user: "No, that's everything, thanks."
     expect:
       - event: function_call

@@ -1,19 +1,15 @@
-# Smoke test for the quickstart flow: a single node transition driven by an edge
-# function, followed by the end_conversation post-action.
 name: hello_world
 
 turns:
-  # The bot greets first on connect — observe it without barging in.
   - expect:
       - event: response
         eval: "the bot says hello and asks what the user's favorite color is"
 
-  # Transitions to the end node, which thanks the user and fires the
-  # end_conversation post-action. We assert only the function call here: the
-  # farewell audio plays as the pipeline tears down and isn't reliably captured.
+  # Terminal turn — assert the function call only: end_conversation tears the
+  # pipeline down before the farewell llm_response reaches the harness.
   - user: "My favorite color is blue."
     expect:
       - event: function_call
         calls:
-          - name: record_favorite_color_func
+          - name: record_favorite_color
             args: { color: blue }

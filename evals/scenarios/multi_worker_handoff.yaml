@@ -1,9 +1,3 @@
-# Multi-worker handoff: a free-form router worker hands off to a structured
-# Flows reservation worker and back. The conversation starts on the router
-# (transfer_to_reservation), crosses into the reservation flow (collect_party_size,
-# check_availability against the mock backend), and ends inside the flow
-# (end_reservation -> end node -> end_conversation action). A 6:00 PM request is
-# open in the mock system, so check_availability routes straight to confirmation.
 name: multi_worker_handoff
 
 turns:
@@ -11,7 +5,6 @@ turns:
       - event: response
         eval: "the bot greets the user and offers to answer questions or book a table"
 
-  # Router hands off to the reservation worker, which then asks for party size.
   - user: "I'd like to book a table."
     expect:
       - event: function_call
@@ -29,7 +22,6 @@ turns:
       - event: response
         eval: "the bot asks what time they would like to dine"
 
-  # 6:00 PM is available in the mock backend, so this routes to confirmation.
   - user: "We'd like to come at six PM."
     expect:
       - event: function_call
@@ -38,8 +30,8 @@ turns:
       - event: response
         eval: "the bot confirms a reservation is available at the requested time"
 
-  # end_reservation transitions to the end node, whose end_conversation post-action
-  # closes the session, so we assert only the function call.
+  # Terminal turn — assert the function call only: end_conversation tears the
+  # pipeline down before the farewell llm_response reaches the harness.
   - user: "No, that's all, thank you."
     expect:
       - event: function_call

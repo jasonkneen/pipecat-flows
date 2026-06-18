@@ -1,12 +1,5 @@
-# LLM switching. The bot starts on OpenAI and exposes switch_llm,
-# get_current_weather, and summarize_conversation at a single node. The harness
-# can't observe which provider is active, so this scenario verifies the part
-# that actually breaks: switch_llm fires with the right provider, and
-# tool-calling + responses keep working *after* each switch (the post-switch
-# LLM run that the example pushes a ManuallySwitchServiceFrame upstream to fix).
-#
-# Requires OPENAI_API_KEY, GOOGLE_API_KEY, and ANTHROPIC_API_KEY. The scenario
-# deliberately avoids switching to AWS Bedrock so it doesn't need AWS creds.
+# Requires OPENAI_API_KEY, GOOGLE_API_KEY, and ANTHROPIC_API_KEY — the bot
+# constructs all three and switches between them (no AWS, so no Bedrock creds).
 name: llm_switching
 
 turns:
@@ -20,8 +13,9 @@ turns:
         calls:
           - name: switch_llm
             args: { llm: Anthropic }
+      - event: response
+        eval: "the bot confirms it switched the language model"
 
-  # Tool call on the newly-active provider — proves the post-switch LLM run works.
   - user: "What's the weather in San Francisco?"
     expect:
       - event: function_call
@@ -36,6 +30,8 @@ turns:
         calls:
           - name: switch_llm
             args: { llm: Google }
+      - event: response
+        eval: "the bot confirms it switched the language model"
 
   - user: "And what's the weather in Paris?"
     expect:
@@ -45,8 +41,6 @@ turns:
       - event: response
         eval: "the bot reports the current weather conditions and temperature"
 
-  # summarize_conversation is an edge function that rebuilds the node with
-  # RESET_WITH_SUMMARY, then speaks the summary.
   - user: "Can you summarize our conversation so far?"
     expect:
       - event: function_call
