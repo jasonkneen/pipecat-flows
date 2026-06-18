@@ -4,9 +4,6 @@
 # FlowsFunctionSchema registration path.
 name: food_ordering_pizza
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   - expect:
       - event: response
@@ -17,6 +14,11 @@ turns:
       - event: function_call
         calls:
           - name: choose_pizza
+      # Assert the post-transition prompt so the harness waits for the pizza node
+      # to settle before the next turn (text turns send instantly, with none of
+      # the audio pacing that masked this).
+      - event: response
+        eval: "the bot asks for pizza details such as size and type"
 
   # Transitions to the confirmation node, which reads the order back.
   - user: "A large pepperoni please."
@@ -34,6 +36,8 @@ turns:
       - event: function_call
         calls:
           - name: get_delivery_estimate
+      - event: response
+        eval: "the bot gives a delivery time estimate"
 
   # complete_order transitions to the end node (end_conversation post-action),
   # so we assert only the function call (see the note in hello_world.yaml).

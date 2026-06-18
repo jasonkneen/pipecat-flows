@@ -4,9 +4,6 @@
 # picks an open slot, which routes to confirmation.
 name: restaurant_reservation_no_availability
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   - expect:
       - event: response

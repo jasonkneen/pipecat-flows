@@ -4,9 +4,6 @@
 # node. The bot greets Chad Bailey and verifies the birthday 1983-01-01.
 name: patient_intake
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   - expect:
       - event: response

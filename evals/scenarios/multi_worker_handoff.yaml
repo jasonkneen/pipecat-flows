@@ -6,9 +6,6 @@
 # open in the mock system, so check_availability routes straight to confirmation.
 name: multi_worker_handoff
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   - expect:
       - event: response

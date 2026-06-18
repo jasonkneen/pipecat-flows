@@ -9,9 +9,6 @@
 # deliberately avoids switching to AWS Bedrock so it doesn't need AWS creds.
 name: llm_switching
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   - expect:
       - event: response

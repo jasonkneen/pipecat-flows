@@ -2,9 +2,6 @@
 # function, followed by the end_conversation post-action.
 name: hello_world
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   # The bot greets first on connect — observe it without barging in.
   - expect:

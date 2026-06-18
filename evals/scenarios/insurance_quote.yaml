@@ -4,9 +4,6 @@
 # adjustments.
 name: insurance_quote
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   # Kept lenient: the bot asks for age here, but the local STT can garble the
   # exact question, so we only require that it greets and starts the quote.

@@ -2,9 +2,6 @@
 # mock system, so check_availability routes to the confirmation node.
 name: restaurant_reservation_available
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   - expect:
       - event: response

@@ -3,9 +3,6 @@
 # (select_sushi_order count).
 name: food_ordering_sushi
 
-user: !include _user_audio.yaml
-judge: !include _judge_audio.yaml
-
 turns:
   - expect:
       - event: response
