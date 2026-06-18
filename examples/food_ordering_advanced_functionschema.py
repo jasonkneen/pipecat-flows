@@ -4,13 +4,19 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
-"""A food ordering flow example using Direct Functions.
+"""An "advanced" food ordering flow example using FlowsFunctionSchema.
 
-This example demonstrates a food ordering system using flows with
-direct functions where conversation paths are determined at runtime.
-Direct functions combine the function definition and handler in a single function.
+This is the FlowsFunctionSchema counterpart to the standard food_ordering.py
+(which uses direct functions). Direct functions are the recommended way to
+define a node's functions: their schema is derived from the function signature
+and docstring. Reach for a FlowsFunctionSchema when you need property control
+the direct-function generator can't give you — for example a strict ``enum``
+constraint or a numeric ``minimum``/``maximum`` (both used below, on the pizza
+size and type and the sushi count and type), which a direct function can only
+hint at in prose in its docstring.
 
 The flow handles:
+
 1. Initial greeting and food type selection (pizza or sushi)
 2. Order details collection based on food type
 3. Order confirmation and revision
@@ -51,7 +57,12 @@ from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
 from utils import create_llm
 
-from pipecat_flows import FlowManager, NodeConfig
+from pipecat_flows import (
+    FlowArgs,
+    FlowManager,
+    FlowsFunctionSchema,
+    NodeConfig,
+)
 
 load_dotenv(override=True)
 
@@ -94,94 +105,34 @@ async def check_kitchen_status(action: dict, flow_manager: FlowManager) -> None:
     logger.info("Checking kitchen status")
 
 
-# Direct Functions for Initial Node
-async def choose_pizza(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
-    """
-    User wants to order pizza. Let's get that order started.
-    """
-    return None, create_pizza_node()
-
-
-async def choose_sushi(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
-    """
-    User wants to order sushi. Let's get that order started.
-    """
-    return None, create_sushi_node()
-
-
-# Direct Functions for Pizza Node
-async def select_pizza_order(
-    flow_manager: FlowManager, size: str, pizza_type: str
-) -> tuple[PizzaOrderResult, NodeConfig]:
-    """
-    Record the pizza order details.
-
-    Args:
-        size (str): Size of the pizza. Must be one of "small", "medium", or "large".
-        pizza_type (str): Type of pizza. Must be one of "pepperoni", "cheese", "supreme", or "vegetarian".
-    """
-    # Simple pricing
-    base_price = {"small": 10.00, "medium": 15.00, "large": 20.00}
-    price = base_price[size]
-
-    result = PizzaOrderResult(size=size, type=pizza_type, price=price)
-
-    # Store order details in flow state
-    flow_manager.state["order"] = {
-        "type": "pizza",
-        "size": size,
-        "pizza_type": pizza_type,
-        "price": price,
-    }
-
-    return result, create_confirmation_node()
-
-
-# Direct Functions for Sushi Node
-async def select_sushi_order(
-    flow_manager: FlowManager, count: int, roll_type: str
-) -> tuple[SushiOrderResult, NodeConfig]:
-    """
-    Record the sushi order details.
-
-    Args:
-        count (int): Number of sushi rolls to order. Must be between 1 and 10.
-        roll_type (str): Type of sushi roll. Must be one of "california", "spicy tuna", "rainbow", or "dragon".
-    """
-    # Simple pricing: $8 per roll
-    price = count * 8.00
-
-    result = SushiOrderResult(count=count, type=roll_type, price=price)
-
-    # Store order details in flow state
-    flow_manager.state["order"] = {
-        "type": "sushi",
-        "count": count,
-        "roll_type": roll_type,
-        "price": price,
-    }
-
-    return result, create_confirmation_node()
-
-
-# Direct Functions for Confirmation Node
-async def complete_order(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
-    """
-    User confirms the order is correct.
-    """
-    return None, create_end_node()
-
-
-async def revise_order(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
-    """
-    User wants to make changes to their order.
-    """
-    return None, create_initial_node()
-
-
 # Node creation functions
 def create_initial_node() -> NodeConfig:
     """Create the initial node for food type selection."""
+
+    async def choose_pizza(args: FlowArgs, flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+        """Transition to pizza order selection."""
+        return None, create_pizza_node()
+
+    async def choose_sushi(args: FlowArgs, flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+        """Transition to sushi order selection."""
+        return None, create_sushi_node()
+
+    choose_pizza_func = FlowsFunctionSchema(
+        name="choose_pizza",
+        handler=choose_pizza,
+        description="User wants to order pizza. Let's get that order started.",
+        properties={},
+        required=[],
+    )
+
+    choose_sushi_func = FlowsFunctionSchema(
+        name="choose_sushi",
+        handler=choose_sushi,
+        description="User wants to order sushi. Let's get that order started.",
+        properties={},
+        required=[],
+    )
+
     return NodeConfig(
         name="initial",
         role_message="You are an order-taking assistant. You must ALWAYS use the available functions to progress the conversation. This is a phone conversation and your responses will be converted to audio. Keep the conversation friendly, casual, and polite. Avoid outputting special characters and emojis.",
@@ -197,12 +148,59 @@ def create_initial_node() -> NodeConfig:
                 "handler": check_kitchen_status,
             },
         ],
-        functions=[choose_pizza, choose_sushi],
+        functions=[choose_pizza_func, choose_sushi_func],
     )
 
 
 def create_pizza_node() -> NodeConfig:
     """Create the pizza ordering node."""
+
+    async def select_pizza_order(
+        args: FlowArgs, flow_manager: FlowManager
+    ) -> tuple[PizzaOrderResult, NodeConfig]:
+        """Handle pizza size and type selection."""
+        size = args["size"]
+        pizza_type = args["type"]
+
+        # Simple pricing
+        base_price = {"small": 10.00, "medium": 15.00, "large": 20.00}
+        price = base_price[size]
+
+        result = PizzaOrderResult(size=size, type=pizza_type, price=price)
+
+        # Store order details in flow state
+        flow_manager.state["order"] = {
+            "type": "pizza",
+            "size": size,
+            "pizza_type": pizza_type,
+            "price": price,
+        }
+
+        return result, create_confirmation_node()
+
+    # Spelling the schema out explicitly gives precise control over the
+    # parameters — here, strict ``enum`` constraints on size and type (and, in
+    # the sushi node, a numeric ``minimum``/``maximum`` on the roll count) —
+    # that a direct function could only describe in prose.
+    select_pizza_func = FlowsFunctionSchema(
+        name="select_pizza_order",
+        handler=select_pizza_order,
+        description="Record the pizza order details",
+        properties={
+            "size": {
+                "type": "string",
+                "enum": ["small", "medium", "large"],
+                "description": "Size of the pizza",
+            },
+            "type": {
+                "type": "string",
+                "enum": ["pepperoni", "cheese", "supreme", "vegetarian"],
+                "description": "Type of pizza",
+            },
+        },
+        required=["size", "type"],
+    )
+
     return NodeConfig(
         name="choose_pizza",
         task_messages=[
@@ -219,12 +217,55 @@ Pricing:
 Remember to be friendly and casual.""",
             }
         ],
-        functions=[select_pizza_order],
+        functions=[select_pizza_func],
     )
 
 
 def create_sushi_node() -> NodeConfig:
     """Create the sushi ordering node."""
+
+    async def select_sushi_order(
+        args: FlowArgs, flow_manager: FlowManager
+    ) -> tuple[SushiOrderResult, NodeConfig]:
+        """Handle sushi roll count and type selection."""
+        count = args["count"]
+        roll_type = args["type"]
+
+        # Simple pricing: $8 per roll
+        price = count * 8.00
+
+        result = SushiOrderResult(count=count, type=roll_type, price=price)
+
+        # Store order details in flow state
+        flow_manager.state["order"] = {
+            "type": "sushi",
+            "count": count,
+            "roll_type": roll_type,
+            "price": price,
+        }
+
+        return result, create_confirmation_node()
+
+    select_sushi_func = FlowsFunctionSchema(
+        name="select_sushi_order",
+        handler=select_sushi_order,
+        description="Record the sushi order details",
+        properties={
+            "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10,
+                "description": "Number of rolls to order",
+            },
+            "type": {
+                "type": "string",
+                "enum": ["california", "spicy tuna", "rainbow", "dragon"],
+                "description": "Type of sushi roll",
+            },
+        },
+        required=["count", "type"],
+    )
+
     return NodeConfig(
         name="choose_sushi",
         task_messages=[
@@ -239,12 +280,37 @@ Pricing:
 Remember to be friendly and casual.""",
             }
         ],
-        functions=[select_sushi_order],
+        functions=[select_sushi_func],
     )
 
 
 def create_confirmation_node() -> NodeConfig:
     """Create the order confirmation node."""
+
+    async def complete_order(args: FlowArgs, flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+        """Transition to end state."""
+        return None, create_end_node()
+
+    async def revise_order(args: FlowArgs, flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+        """Transition to start for order revision."""
+        return None, create_initial_node()
+
+    complete_order_func = FlowsFunctionSchema(
+        name="complete_order",
+        handler=complete_order,
+        description="User confirms the order is correct",
+        properties={},
+        required=[],
+    )
+
+    revise_order_func = FlowsFunctionSchema(
+        name="revise_order",
+        handler=revise_order,
+        description="User wants to make changes to their order",
+        properties={},
+        required=[],
+    )
+
     return NodeConfig(
         name="confirm",
         task_messages=[
@@ -257,7 +323,7 @@ def create_confirmation_node() -> NodeConfig:
 Be friendly and clear when reading back the order details.""",
             }
         ],
-        functions=[complete_order, revise_order],
+        functions=[complete_order_func, revise_order_func],
     )
 
 
@@ -276,7 +342,7 @@ def create_end_node() -> NodeConfig:
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
-    """Run the food ordering bot with direct functions."""
+    """Run the food ordering bot."""
     stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY", ""))
     tts = CartesiaTTSService(
         api_key=os.getenv("CARTESIA_API_KEY", ""),
@@ -320,7 +386,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     # Define "global" functions available at every node
     async def get_delivery_estimate(
-        flow_manager: FlowManager,
+        args: FlowArgs, flow_manager: FlowManager
     ) -> tuple[DeliveryEstimateResult, None]:
         """Provide delivery estimate information."""
         delivery_time = datetime.now() + timedelta(minutes=30)
@@ -328,13 +394,21 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             time=f"{delivery_time}",
         ), None
 
+    get_delivery_estimate_func = FlowsFunctionSchema(
+        name="get_delivery_estimate",
+        handler=get_delivery_estimate,
+        description="Get a delivery estimate for the current order",
+        properties={},
+        required=[],
+    )
+
     # Initialize flow manager
     flow_manager = FlowManager(
         worker=worker,
         llm=llm,
         context_aggregator=context_aggregator,
         transport=transport,
-        global_functions=[get_delivery_estimate],
+        global_functions=[get_delivery_estimate_func],
     )
 
     @transport.event_handler("on_client_connected")

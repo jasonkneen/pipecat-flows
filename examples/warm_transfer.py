@@ -72,7 +72,7 @@ from pipecat.workers.runner import WorkerRunner
 from utils import create_llm
 
 from pipecat_flows import ContextStrategyConfig, FlowManager, NodeConfig
-from pipecat_flows.types import ActionConfig, ContextStrategy, FlowArgs, FlowsFunctionSchema
+from pipecat_flows.types import ActionConfig, ContextStrategy
 
 load_dotenv(override=True)
 
@@ -131,10 +131,10 @@ class StartOrderResult(TypedDict):
     status: str
 
 
-# Function handlers
-async def check_store_location_and_hours_of_operation() -> tuple[
-    StoreLocationAndHoursOfOperationResult, NodeConfig
-]:
+# Tool functions
+async def check_store_location_and_hours_of_operation(
+    flow_manager: FlowManager,
+) -> tuple[StoreLocationAndHoursOfOperationResult, NodeConfig]:
     """Check store location and hours of operation."""
     result = StoreLocationAndHoursOfOperationResult(
         status="success",
@@ -145,8 +145,8 @@ async def check_store_location_and_hours_of_operation() -> tuple[
     return result, next_node
 
 
-async def start_order() -> tuple[StartOrderResult, NodeConfig]:
-    """Start a new order."""
+async def start_order(flow_manager: FlowManager) -> tuple[StartOrderResult, NodeConfig]:
+    """Start placing an order."""
     result = StartOrderResult(status="error")
     next_node = next_node_after_customer_task(result)
     return result, next_node
@@ -236,18 +236,13 @@ async def unmute_customer_and_make_humans_hear_each_other(action: dict, flow_man
         )
 
 
-# Functions
-async def end_customer_conversation(
-    args: FlowArgs, flow_manager: FlowManager
-) -> tuple[None, NodeConfig]:
-    """Transition to the "end_customer_conversation" node."""
+async def end_customer_conversation(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+    """End the conversation."""
     return None, create_end_customer_conversation_node()
 
 
-async def end_human_agent_conversation(
-    args: FlowArgs, flow_manager: FlowManager
-) -> tuple[None, NodeConfig]:
-    """Transition to the "end_human_agent_conversation" node."""
+async def connect_human_agent_and_customer(flow_manager: FlowManager) -> tuple[None, NodeConfig]:
+    """Connect the human agent to the customer."""
     return None, create_end_human_agent_conversation_node()
 
 
@@ -288,27 +283,9 @@ def create_initial_customer_interaction_node() -> NodeConfig:
             }
         ],
         functions=[
-            FlowsFunctionSchema(
-                name="check_store_location_and_hours_of_operation",
-                description="Check store location and hours of operation",
-                handler=check_store_location_and_hours_of_operation,
-                properties={},
-                required=[],
-            ),
-            FlowsFunctionSchema(
-                name="start_order",
-                description="Start placing an order",
-                handler=start_order,
-                properties={},
-                required=[],
-            ),
-            FlowsFunctionSchema(
-                name="end_customer_conversation",
-                description="End the conversation",
-                handler=end_customer_conversation,
-                properties={},
-                required=[],
-            ),
+            check_store_location_and_hours_of_operation,
+            start_order,
+            end_customer_conversation,
         ],
     )
 
@@ -334,27 +311,9 @@ def create_continued_customer_interaction_node() -> NodeConfig:
             }
         ],
         functions=[
-            FlowsFunctionSchema(
-                name="check_store_location_and_hours_of_operation",
-                description="Check store location and hours of operation",
-                handler=check_store_location_and_hours_of_operation,
-                properties={},
-                required=[],
-            ),
-            FlowsFunctionSchema(
-                name="start_order",
-                description="Start placing an order",
-                handler=start_order,
-                properties={},
-                required=[],
-            ),
-            FlowsFunctionSchema(
-                name="end_customer_conversation",
-                description="End the conversation",
-                handler=end_customer_conversation,
-                properties={},
-                required=[],
-            ),
+            check_store_location_and_hours_of_operation,
+            start_order,
+            end_customer_conversation,
         ],
     )
 
@@ -405,13 +364,7 @@ def create_human_agent_interaction_node() -> NodeConfig:
             ),
         ),
         functions=[
-            FlowsFunctionSchema(
-                name="connect_human_agent_and_customer",
-                description="Connect the human agent to the customer",
-                handler=end_human_agent_conversation,
-                properties={},
-                required=[],
-            )
+            connect_human_agent_and_customer,
         ],
     )
 

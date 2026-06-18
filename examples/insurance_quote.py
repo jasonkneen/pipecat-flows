@@ -7,7 +7,6 @@
 
 This example demonstrates how to create a conversational insurance quote bot using:
 - Flow management for flexible conversation paths
-- LLM-driven function calls for consistent behavior
 - Node configurations for different conversation states
 - Pre/post actions for user feedback
 - Transition logic based on user responses
@@ -53,7 +52,7 @@ from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
 from utils import create_llm
 
-from pipecat_flows import FlowArgs, FlowManager, FlowsFunctionSchema, NodeConfig
+from pipecat_flows import FlowManager, NodeConfig
 
 load_dotenv(override=True)
 
@@ -105,12 +104,15 @@ INSURANCE_RATES = {
 }
 
 
-# Function handlers
+# Functions
 async def collect_age(
-    args: FlowArgs, flow_manager: FlowManager
+    flow_manager: FlowManager, age: int
 ) -> tuple[AgeCollectionResult, NodeConfig]:
-    """Process age collection."""
-    age = args["age"]
+    """Record customer's age.
+
+    Args:
+        age (int): The customer's age.
+    """
     logger.debug(f"collect_age handler executing with age: {age}")
 
     flow_manager.state["age"] = age
@@ -122,23 +124,31 @@ async def collect_age(
 
 
 async def collect_marital_status(
-    args: FlowArgs, flow_manager: FlowManager
+    flow_manager: FlowManager, marital_status: str
 ) -> tuple[MaritalStatusResult, NodeConfig]:
-    """Process marital status collection."""
-    status = args["marital_status"]
-    logger.debug(f"collect_marital_status handler executing with status: {status}")
+    """Record marital status after customer provides it.
 
-    result = MaritalStatusResult(marital_status=status)
+    Args:
+        marital_status (str): The customer's marital status. Must be one of "single", "married".
+    """
+    logger.debug(f"collect_marital_status handler executing with status: {marital_status}")
 
-    next_node = create_quote_calculation_node(flow_manager.state["age"], status)
+    result = MaritalStatusResult(marital_status=marital_status)
+
+    next_node = create_quote_calculation_node(flow_manager.state["age"], marital_status)
 
     return result, next_node
 
 
-async def calculate_quote(args: FlowArgs) -> tuple[QuoteCalculationResult, NodeConfig]:
-    """Calculate insurance quote based on age and marital status."""
-    age = args["age"]
-    marital_status = args["marital_status"]
+async def calculate_quote(
+    flow_manager: FlowManager, age: int, marital_status: str
+) -> tuple[QuoteCalculationResult, NodeConfig]:
+    """Calculate initial insurance quote.
+
+    Args:
+        age (int): The customer's age.
+        marital_status (str): The customer's marital status. Must be one of "single", "married".
+    """
     logger.debug(f"calculate_quote handler executing with age: {age}, status: {marital_status}")
 
     # Determine rate category
@@ -158,10 +168,15 @@ async def calculate_quote(args: FlowArgs) -> tuple[QuoteCalculationResult, NodeC
     return result, next_node
 
 
-async def update_coverage(args: FlowArgs) -> tuple[CoverageUpdateResult, NodeConfig]:
-    """Update coverage options and recalculate premium."""
-    coverage_amount = args["coverage_amount"]
-    deductible = args["deductible"]
+async def update_coverage(
+    flow_manager: FlowManager, coverage_amount: int, deductible: int
+) -> tuple[CoverageUpdateResult, NodeConfig]:
+    """Recalculate quote with new coverage options.
+
+    Args:
+        coverage_amount (int): The desired coverage amount in dollars.
+        deductible (int): The desired deductible amount in dollars.
+    """
     logger.debug(
         f"update_coverage handler executing with amount: {coverage_amount}, deductible: {deductible}"
     )
@@ -180,8 +195,8 @@ async def update_coverage(args: FlowArgs) -> tuple[CoverageUpdateResult, NodeCon
     return result, next_node
 
 
-async def end_quote(args: FlowArgs) -> tuple[Any, NodeConfig]:
-    """Handle quote completion."""
+async def end_quote(flow_manager: FlowManager) -> tuple[Any, NodeConfig]:
+    """Complete the quote process when customer is satisfied."""
     logger.debug("end_quote handler executing")
     return {"status": "completed"}, create_end_node()
 
@@ -198,15 +213,7 @@ def create_initial_node() -> NodeConfig:
                 "content": "Start by asking for the customer's age.",
             }
         ],
-        functions=[
-            FlowsFunctionSchema(
-                name="collect_age",
-                description="Record customer's age",
-                properties={"age": {"type": "integer"}},
-                required=["age"],
-                handler=collect_age,
-            )
-        ],
+        functions=[collect_age],
     )
 
 
@@ -220,15 +227,7 @@ def create_marital_status_node() -> NodeConfig:
                 "content": "Ask about the customer's marital status for premium calculation.",
             }
         ],
-        functions=[
-            FlowsFunctionSchema(
-                name="collect_marital_status",
-                description="Record marital status after customer provides it",
-                properties={"marital_status": {"type": "string", "enum": ["single", "married"]}},
-                required=["marital_status"],
-                handler=collect_marital_status,
-            )
-        ],
+        functions=[collect_marital_status],
     )
 
 
@@ -246,18 +245,7 @@ def create_quote_calculation_node(age: int, marital_status: str) -> NodeConfig:
                 ),
             }
         ],
-        functions=[
-            FlowsFunctionSchema(
-                name="calculate_quote",
-                description="Calculate initial insurance quote",
-                properties={
-                    "age": {"type": "integer"},
-                    "marital_status": {"type": "string", "enum": ["single", "married"]},
-                },
-                required=["age", "marital_status"],
-                handler=calculate_quote,
-            )
-        ],
+        functions=[calculate_quote],
     )
 
 
@@ -283,25 +271,7 @@ def create_quote_results_node(
                 ),
             }
         ],
-        functions=[
-            FlowsFunctionSchema(
-                name="update_coverage",
-                description="Recalculate quote with new coverage options",
-                properties={
-                    "coverage_amount": {"type": "integer"},
-                    "deductible": {"type": "integer"},
-                },
-                required=["coverage_amount", "deductible"],
-                handler=update_coverage,
-            ),
-            FlowsFunctionSchema(
-                name="end_quote",
-                description="Complete the quote process when customer is satisfied",
-                properties={},
-                required=[],
-                handler=end_quote,
-            ),
-        ],
+        functions=[update_coverage, end_quote],
     )
 
 

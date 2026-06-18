@@ -16,19 +16,16 @@ See [quickstart/README.md](./quickstart/README.md) for a beginner-friendly intro
 - `restaurant_reservation.py` - Reservation system with availability checking
 - `patient_intake.py` - Medical intake system showing complex state management
 - `insurance_quote.py` - Insurance quote system with data collection
-
-#### Implementation Patterns
-
-- `food_ordering_direct_functions.py` - Food ordering using direct function registration
-- `restaurant_reservation_direct_functions.py` - Reservation system using direct function registration
-- `llm_switching.py` - Switching between different LLM providers during conversation
+- `podcast_interview.py` - Podcast interview flow
 
 #### Advanced Features
 
+- `llm_switching.py` - Switching between different LLM providers during conversation
 - `warm_transfer.py` - Transferring calls between different flows (DailyTransport only)
 - `multi_worker_handoff.py` - Composing Flows with Pipecat's multi-worker framework: a structured Flows reservation worker hands off to and from a free-form `LLMWorker` router over the bus, sharing a single conversation context
+- `food_ordering_advanced_functionschema.py` - The food ordering flow defined with `FlowsFunctionSchema`s instead of direct functions, for when you need to specify a function's schema explicitly
 
-**Note:** All examples support multiple LLM providers (OpenAI, Anthropic, Google, AWS Bedrock) and transport options unless otherwise specified. Pipecat Flows handles the different function calling formats internally while maintaining a consistent API for developers.
+**Note:** The examples define their functions as "direct functions" — async functions whose schema is derived from the signature and docstring — which is the recommended pattern. `food_ordering_advanced_functionschema.py` shows the alternative `FlowsFunctionSchema` approach. All examples support multiple LLM providers (OpenAI, Anthropic, Google, AWS Bedrock) and transport options unless otherwise specified.
 
 ## Setup and Installation
 
