@@ -24,7 +24,7 @@ turns:
       - event: function_call
         calls:
           - name: select_pizza_order
-            args: { size: large, type: pepperoni }
+            args: { size: large, pizza_type: pepperoni }
       - event: response
         eval: "the bot reads back or confirms a large pepperoni pizza order"
 

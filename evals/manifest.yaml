@@ -19,10 +19,13 @@ suite:
     scenarios: [hello_world]
 
   - bot: food_ordering.py
-    scenarios: [food_ordering_pizza, food_ordering_sushi]
+    scenarios: [food_ordering_pizza]
 
-  - bot: food_ordering_direct_functions.py
-    scenarios: [food_ordering_direct]
+  - bot: food_ordering_advanced_functionschema.py
+    scenarios: [food_ordering_sushi]
+
+  - bot: multi_worker_handoff.py
+    scenarios: [multi_worker_handoff]
 
   - bot: patient_intake.py
     scenarios: [patient_intake]
