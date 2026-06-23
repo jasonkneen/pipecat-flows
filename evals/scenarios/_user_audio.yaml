@@ -1,0 +1,10 @@
+# Shared `user:` block for audio-mode scenarios (pull in with `user: !include _user_audio.yaml`).
+#
+# The harness synthesizes each user turn with Kokoro, a local TTS that needs no
+# API key, and streams the audio to the bot so its real VAD + STT run end to end.
+# The model downloads once on first use.
+modality: audio
+speech:
+  service: kokoro
+  voice: af_heart
+  sample_rate: 16000

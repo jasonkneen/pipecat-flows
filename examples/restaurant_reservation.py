@@ -33,6 +33,7 @@ from typing import TypedDict
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.evals.transport import EvalTransportParams
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -64,6 +65,11 @@ transport_params = {
         audio_out_enabled=True,
     ),
     "webrtc": lambda: TransportParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+    ),
+    # Behavioral evals: run with `-t eval` to drive this bot via `pipecat eval`.
+    "eval": lambda: EvalTransportParams(
         audio_in_enabled=True,
         audio_out_enabled=True,
     ),
@@ -204,7 +210,12 @@ def create_confirmation_node() -> NodeConfig:
         task_messages=[
             {
                 "role": "developer",
-                "content": "Confirm the reservation details and ask if they need anything else.",
+                "content": (
+                    "Confirm the reservation details and ask if they need anything else. "
+                    "When the customer says they're all set or have nothing else, call the "
+                    "end_conversation function to wrap up. If they still need something, help "
+                    "them and then ask again whether there's anything else."
+                ),
             }
         ],
         functions=[end_conversation],
@@ -222,7 +233,9 @@ def create_no_availability_node(alternative_times: list[str]) -> NodeConfig:
                 "content": (
                     f"Apologize that the requested time is not available. "
                     f"Suggest these alternative times: {times_list}. "
-                    "Ask if they'd like to try one of these times."
+                    "Ask if they'd like to try one of these times. If they pick a time, check "
+                    "its availability. If they'd rather not book after all, call the "
+                    "end_conversation function to wrap up."
                 ),
             }
         ],

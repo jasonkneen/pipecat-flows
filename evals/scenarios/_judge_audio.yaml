@@ -1,0 +1,14 @@
+# Shared `judge:` block for audio-mode scenarios (pull in with `judge: !include _judge_audio.yaml`).
+#
+# The bot speaks for real; the harness transcribes its audio with Moonshine (a
+# local STT, no API key) and scores each `eval:` criterion with a judge LLM.
+# `eval:` is omitted here, so the judge defaults to a local Ollama gemma2:9b
+# (run `ollama pull gemma2:9b` once). To judge with OpenAI instead, add:
+#
+#   eval:
+#     service: openai
+#     model: gpt-4.1
+modality: audio
+transcription:
+  service: moonshine
+  model: small-streaming
