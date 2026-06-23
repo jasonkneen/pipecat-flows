@@ -683,11 +683,8 @@ async def main():
 
         # Prepare hold music args
         flow_manager.state["hold_music_args"] = {
-            "script_path": Path(__file__).parent.parent / "assets" / "hold_music" / "hold_music.py",
-            "wav_file_path": Path(__file__).parent.parent
-            / "assets"
-            / "hold_music"
-            / "hold_music.wav",
+            "script_path": Path(__file__).parent / "assets" / "hold_music" / "hold_music.py",
+            "wav_file_path": Path(__file__).parent / "assets" / "hold_music" / "hold_music.wav",
             "room_url": room_url,
             "token": await get_hold_music_player_token(
                 daily_rest_helper=daily_rest_helper, room_url=room_url
